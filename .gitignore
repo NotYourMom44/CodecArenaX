@@ -1,0 +1,26 @@
+# Unreal Engine generated files
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.opendb
+
+# Rider
+.idea/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Build output
+Build/
+
+# Unreal temporary files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
