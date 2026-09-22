@@ -4,6 +4,7 @@
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputActionValue.h"
+#include "Camera/CameraComponent.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -13,6 +14,24 @@ APlayerCharacter::APlayerCharacter()
     SprintSpeed = 1000.0f;
 
     GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;
+
+    WeaponInventoryComponent =
+        CreateDefaultSubobject<UWeaponInventoryComponent>(
+            TEXT("WeaponInventoryComponent")
+        );
+}
+
+void APlayerCharacter::BeginPlay()
+{
+    Super::BeginPlay();
+
+    if (WeaponInventoryComponent)
+    {
+        UCameraComponent* CameraComponent =
+            FindComponentByClass<UCameraComponent>();
+
+        WeaponInventoryComponent->EquipDefaultWeapon(CameraComponent);
+    }
 }
 
 void APlayerCharacter::SetupPlayerInputComponent(

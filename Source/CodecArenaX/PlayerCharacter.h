@@ -5,6 +5,7 @@
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "InputAction.h"
+#include "WeaponInventoryComponent.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -16,6 +17,11 @@ public:
     APlayerCharacter();
 
 protected:
+    virtual void BeginPlay() override;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UWeaponInventoryComponent> WeaponInventoryComponent;
+
     virtual void SetupPlayerInputComponent(
         class UInputComponent* PlayerInputComponent
     ) override;
