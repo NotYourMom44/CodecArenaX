@@ -4,6 +4,7 @@
 #include "Damageable.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
+#include "NiagaraComponent.h"
 
 ABaseWeapon::ABaseWeapon()
 {
@@ -20,6 +21,15 @@ void ABaseWeapon::Fire()
     if (!WeaponOwner)
     {
         return;
+    }
+
+    UNiagaraComponent* MuzzleFlash = FindComponentByClass<UNiagaraComponent>();
+
+    if (MuzzleFlash)
+    {
+        MuzzleFlash->Deactivate();
+        MuzzleFlash->ResetSystem();
+        MuzzleFlash->Activate(true);
     }
 
     UCameraComponent* Camera =
