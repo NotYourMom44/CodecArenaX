@@ -32,6 +32,7 @@ protected:
     void StopJump(const FInputActionValue& Value);
     void StartSprint(const FInputActionValue& Value);
     void StopSprint(const FInputActionValue& Value);
+    void Fire(const FInputActionValue& Value);
 
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputMappingContext> PlayerMappingContext;
@@ -47,6 +48,9 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputAction> SprintAction;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> FireAction;
 
 private:
     UPROPERTY(EditDefaultsOnly, Category = "Movement")

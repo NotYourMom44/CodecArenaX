@@ -21,4 +21,7 @@ public:
 protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
     float Damage;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+    float Range;
 };

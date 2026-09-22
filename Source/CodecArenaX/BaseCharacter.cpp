@@ -6,3 +6,11 @@ ABaseCharacter::ABaseCharacter()
 
     HealthComponent = CreateDefaultSubobject<UHealthComponent>(TEXT("HealthComponent"));
 }
+
+void ABaseCharacter::ReceiveDamage(float DamageAmount)
+{
+    if (HealthComponent)
+    {
+        HealthComponent->TakeDamage(DamageAmount);
+    }
+}

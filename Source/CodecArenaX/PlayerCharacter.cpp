@@ -5,6 +5,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "InputActionValue.h"
 #include "Camera/CameraComponent.h"
+#include "BaseWeapon.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -111,6 +112,16 @@ void APlayerCharacter::SetupPlayerInputComponent(
                 &APlayerCharacter::StopSprint
             );
         }
+
+        if (FireAction)
+        {
+            EnhancedInputComponent->BindAction(
+                FireAction,
+                ETriggerEvent::Started,
+                this,
+                &APlayerCharacter::Fire
+            );
+        }
     }
 }
 
@@ -160,4 +171,20 @@ void APlayerCharacter::Look(const FInputActionValue& Value)
 
     AddControllerYawInput(LookAxis.X);
     AddControllerPitchInput(-LookAxis.Y);
+}
+
+void APlayerCharacter::Fire(const FInputActionValue& Value)
+{
+    if (!WeaponInventoryComponent)
+    {
+        return;
+    }
+
+    ABaseWeapon* EquippedWeapon =
+        WeaponInventoryComponent->GetEquippedWeapon();
+
+    if (EquippedWeapon)
+    {
+        EquippedWeapon->Fire();
+    }
 }
