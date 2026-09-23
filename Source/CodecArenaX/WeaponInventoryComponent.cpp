@@ -1,6 +1,7 @@
 #include "WeaponInventoryComponent.h"
 
 #include "BaseWeapon.h"
+#include "SecondaryWeapon.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
 
@@ -95,6 +96,36 @@ ABaseWeapon* UWeaponInventoryComponent::GetSecondaryWeapon() const
 ABaseWeapon* UWeaponInventoryComponent::GetEquippedWeapon() const
 {
     return EquippedWeapon;
+}
+
+FString UWeaponInventoryComponent::GetEquippedWeaponName() const
+{
+    if (EquippedWeapon == SecondaryWeapon)
+    {
+        return TEXT("AK");
+    }
+
+    return TEXT("PISTOL");
+}
+
+FString UWeaponInventoryComponent::GetEquippedAmmoText() const
+{
+    if (EquippedWeapon == SecondaryWeapon)
+    {
+        ASecondaryWeapon* SecondaryWeaponInstance =
+            Cast<ASecondaryWeapon>(SecondaryWeapon);
+
+        if (SecondaryWeaponInstance)
+        {
+            return FString::Printf(
+                TEXT("%d / %d"),
+                SecondaryWeaponInstance->GetCurrentAmmo(),
+                SecondaryWeaponInstance->GetMaxAmmo()
+            );
+        }
+    }
+
+    return TEXT("∞");
 }
 
 void UWeaponInventoryComponent::EquipDefaultWeapon()

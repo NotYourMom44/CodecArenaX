@@ -27,6 +27,12 @@ public:
     UFUNCTION(BlueprintPure, Category = "Weapons")
     ABaseWeapon* GetEquippedWeapon() const;
 
+    UFUNCTION(BlueprintPure, Category = "Weapons")
+    FString GetEquippedWeaponName() const;
+
+    UFUNCTION(BlueprintPure, Category = "Weapons")
+    FString GetEquippedAmmoText() const;
+
     void EquipDefaultWeapon();
     void EquipSecondaryWeapon();
 
