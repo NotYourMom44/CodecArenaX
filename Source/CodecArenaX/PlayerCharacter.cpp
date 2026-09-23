@@ -133,6 +133,26 @@ void APlayerCharacter::SetupPlayerInputComponent(
                 &APlayerCharacter::Interact
             );
         }
+
+        if (DefaultWeaponAction)
+        {
+            EnhancedInputComponent->BindAction(
+                DefaultWeaponAction,
+                ETriggerEvent::Started,
+                this,
+                &APlayerCharacter::EquipDefaultWeapon
+            );
+        }
+
+        if (SecondaryWeaponAction)
+        {
+            EnhancedInputComponent->BindAction(
+                SecondaryWeaponAction,
+                ETriggerEvent::Started,
+                this,
+                &APlayerCharacter::EquipSecondaryWeapon
+            );
+        }
     }
 }
 
@@ -238,5 +258,21 @@ void APlayerCharacter::Interact(const FInputActionValue& Value)
     if (Pickup)
     {
         Pickup->Interact(this);
+    }
+}
+
+void APlayerCharacter::EquipDefaultWeapon(const FInputActionValue& Value)
+{
+    if (WeaponInventoryComponent)
+    {
+        WeaponInventoryComponent->EquipDefaultWeapon();
+    }
+}
+
+void APlayerCharacter::EquipSecondaryWeapon(const FInputActionValue& Value)
+{
+    if (WeaponInventoryComponent)
+    {
+        WeaponInventoryComponent->EquipSecondaryWeapon();
     }
 }

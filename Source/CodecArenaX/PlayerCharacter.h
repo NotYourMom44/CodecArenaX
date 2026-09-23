@@ -34,6 +34,8 @@ protected:
     void StopSprint(const FInputActionValue& Value);
     void Fire(const FInputActionValue& Value);
     void Interact(const FInputActionValue& Value);
+    void EquipDefaultWeapon(const FInputActionValue& Value);
+    void EquipSecondaryWeapon(const FInputActionValue& Value);
 
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputMappingContext> PlayerMappingContext;
@@ -55,6 +57,12 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, Category = "Input")
     TObjectPtr<UInputAction> InteractAction;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> DefaultWeaponAction;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Input")
+    TObjectPtr<UInputAction> SecondaryWeaponAction;
 
 private:
     UPROPERTY(EditDefaultsOnly, Category = "Movement")

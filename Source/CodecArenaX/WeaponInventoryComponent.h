@@ -27,6 +27,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Weapons")
     ABaseWeapon* GetEquippedWeapon() const;
 
+    void EquipDefaultWeapon();
+    void EquipSecondaryWeapon();
+
 protected:
     UPROPERTY(EditDefaultsOnly, Category = "Weapons")
     TSubclassOf<ABaseWeapon> DefaultWeaponClass;

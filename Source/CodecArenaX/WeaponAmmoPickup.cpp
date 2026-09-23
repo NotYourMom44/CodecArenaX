@@ -41,7 +41,10 @@ void AWeaponAmmoPickup::Interact(APlayerCharacter* PlayerCharacter)
         return;
     }
 
-    if (!Inventory->HasSecondaryWeapon())
+    const bool bAlreadyHadSecondary =
+        Inventory->HasSecondaryWeapon();
+
+    if (!bAlreadyHadSecondary)
     {
         UCameraComponent* CameraComponent =
             PlayerCharacter->FindComponentByClass<UCameraComponent>();
@@ -55,7 +58,7 @@ void AWeaponAmmoPickup::Interact(APlayerCharacter* PlayerCharacter)
     ASecondaryWeapon* SecondaryWeapon =
         Cast<ASecondaryWeapon>(SecondaryWeaponBase);
 
-    if (SecondaryWeapon)
+    if (bAlreadyHadSecondary && SecondaryWeapon)
     {
         SecondaryWeapon->AddAmmo(AmmoAmount);
     }

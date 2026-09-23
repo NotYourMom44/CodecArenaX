@@ -96,3 +96,35 @@ ABaseWeapon* UWeaponInventoryComponent::GetEquippedWeapon() const
 {
     return EquippedWeapon;
 }
+
+void UWeaponInventoryComponent::EquipDefaultWeapon()
+{
+    if (!DefaultWeapon)
+    {
+        return;
+    }
+
+    if (SecondaryWeapon)
+    {
+        SecondaryWeapon->SetActorHiddenInGame(true);
+    }
+
+    DefaultWeapon->SetActorHiddenInGame(false);
+    EquippedWeapon = DefaultWeapon;
+}
+
+void UWeaponInventoryComponent::EquipSecondaryWeapon()
+{
+    if (!SecondaryWeapon)
+    {
+        return;
+    }
+
+    if (DefaultWeapon)
+    {
+        DefaultWeapon->SetActorHiddenInGame(true);
+    }
+
+    SecondaryWeapon->SetActorHiddenInGame(false);
+    EquippedWeapon = SecondaryWeapon;
+}
