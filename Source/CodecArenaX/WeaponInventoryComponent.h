@@ -16,6 +16,14 @@ public:
 
     void EquipDefaultWeapon(USceneComponent* AttachParent);
 
+    void AcquireSecondaryWeapon(USceneComponent* AttachParent);
+
+    UFUNCTION(BlueprintPure, Category = "Weapons")
+    bool HasSecondaryWeapon() const;
+
+    UFUNCTION(BlueprintPure, Category = "Weapons")
+    ABaseWeapon* GetSecondaryWeapon() const;
+
     UFUNCTION(BlueprintPure, Category = "Weapons")
     ABaseWeapon* GetEquippedWeapon() const;
 
@@ -23,8 +31,14 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category = "Weapons")
     TSubclassOf<ABaseWeapon> DefaultWeaponClass;
 
+    UPROPERTY(EditDefaultsOnly, Category = "Weapons")
+    TSubclassOf<ABaseWeapon> SecondaryWeaponClass;
+
     UPROPERTY(VisibleInstanceOnly, Category = "Weapons")
     TObjectPtr<ABaseWeapon> DefaultWeapon;
+
+    UPROPERTY(VisibleInstanceOnly, Category = "Weapons")
+    TObjectPtr<ABaseWeapon> SecondaryWeapon;
 
     UPROPERTY(VisibleInstanceOnly, Category = "Weapons")
     TObjectPtr<ABaseWeapon> EquippedWeapon;

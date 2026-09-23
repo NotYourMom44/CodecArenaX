@@ -2,6 +2,7 @@
 
 #include "BaseWeapon.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Pawn.h"
 
 UWeaponInventoryComponent::UWeaponInventoryComponent()
 {
@@ -10,7 +11,7 @@ UWeaponInventoryComponent::UWeaponInventoryComponent()
 
 void UWeaponInventoryComponent::EquipDefaultWeapon(USceneComponent* AttachParent)
 {
-    if (!DefaultWeaponClass || DefaultWeapon || !AttachParent)
+    if (!DefaultWeaponClass || DefaultWeapon)
     {
         return;
     }
@@ -34,13 +35,61 @@ void UWeaponInventoryComponent::EquipDefaultWeapon(USceneComponent* AttachParent
 
     if (DefaultWeapon)
     {
-        DefaultWeapon->AttachToComponent(
+        EquippedWeapon = DefaultWeapon;
+
+        if (AttachParent)
+        {
+            DefaultWeapon->AttachToComponent(
+                AttachParent,
+                FAttachmentTransformRules::SnapToTargetNotIncludingScale
+            );
+        }
+    }
+}
+
+void UWeaponInventoryComponent::AcquireSecondaryWeapon(USceneComponent* AttachParent)
+{
+    if (!SecondaryWeaponClass || SecondaryWeapon)
+    {
+        return;
+    }
+
+    AActor* OwnerActor = GetOwner();
+
+    if (!OwnerActor)
+    {
+        return;
+    }
+
+    FActorSpawnParameters SpawnParameters;
+    SpawnParameters.Owner = OwnerActor;
+    SpawnParameters.Instigator = Cast<APawn>(OwnerActor);
+
+    SecondaryWeapon = OwnerActor->GetWorld()->SpawnActor<ABaseWeapon>(
+        SecondaryWeaponClass,
+        FTransform::Identity,
+        SpawnParameters
+    );
+
+    if (SecondaryWeapon && AttachParent)
+    {
+        SecondaryWeapon->AttachToComponent(
             AttachParent,
             FAttachmentTransformRules::SnapToTargetNotIncludingScale
         );
 
-        EquippedWeapon = DefaultWeapon;
+        SecondaryWeapon->SetActorHiddenInGame(true);
     }
+}
+
+bool UWeaponInventoryComponent::HasSecondaryWeapon() const
+{
+    return SecondaryWeapon != nullptr;
+}
+
+ABaseWeapon* UWeaponInventoryComponent::GetSecondaryWeapon() const
+{
+    return SecondaryWeapon;
 }
 
 ABaseWeapon* UWeaponInventoryComponent::GetEquippedWeapon() const

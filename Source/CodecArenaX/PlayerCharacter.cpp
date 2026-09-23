@@ -6,6 +6,7 @@
 #include "InputActionValue.h"
 #include "Camera/CameraComponent.h"
 #include "BaseWeapon.h"
+#include "WeaponAmmoPickup.h"
 
 APlayerCharacter::APlayerCharacter()
 {
@@ -122,6 +123,16 @@ void APlayerCharacter::SetupPlayerInputComponent(
                 &APlayerCharacter::Fire
             );
         }
+
+        if (InteractAction)
+        {
+            EnhancedInputComponent->BindAction(
+                InteractAction,
+                ETriggerEvent::Started,
+                this,
+                &APlayerCharacter::Interact
+            );
+        }
     }
 }
 
@@ -186,5 +197,46 @@ void APlayerCharacter::Fire(const FInputActionValue& Value)
     if (EquippedWeapon)
     {
         EquippedWeapon->Fire();
+    }
+}
+
+void APlayerCharacter::Interact(const FInputActionValue& Value)
+{
+    UCameraComponent* CameraComponent =
+        FindComponentByClass<UCameraComponent>();
+
+    if (!CameraComponent)
+    {
+        return;
+    }
+
+    const FVector Start = CameraComponent->GetComponentLocation();
+    const FVector End =
+        Start + (CameraComponent->GetForwardVector() * 300.0f);
+
+    FHitResult HitResult;
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(this);
+
+    const bool bHit = GetWorld()->LineTraceSingleByChannel(
+        HitResult,
+        Start,
+        End,
+        ECC_Visibility,
+        QueryParams
+    );
+
+    if (!bHit || !HitResult.GetActor())
+    {
+        return;
+    }
+
+    AWeaponAmmoPickup* Pickup =
+        Cast<AWeaponAmmoPickup>(HitResult.GetActor());
+
+    if (Pickup)
+    {
+        Pickup->Interact(this);
     }
 }
