@@ -14,9 +14,11 @@ class CODECARENAX_API UWeaponInventoryComponent : public UActorComponent
 public:
     UWeaponInventoryComponent();
 
-    void EquipDefaultWeapon(USceneComponent* AttachParent);
+    void EquipDefaultWeapon();
 
-    void AcquireSecondaryWeapon(USceneComponent* AttachParent);
+    void AcquireSecondaryWeapon();
+
+    void EquipSecondaryWeapon();
 
     UFUNCTION(BlueprintPure, Category = "Weapons")
     bool HasSecondaryWeapon() const;
@@ -33,9 +35,6 @@ public:
     UFUNCTION(BlueprintPure, Category = "Weapons")
     FString GetEquippedAmmoText() const;
 
-    void EquipDefaultWeapon();
-    void EquipSecondaryWeapon();
-
 protected:
     UPROPERTY(EditDefaultsOnly, Category = "Weapons")
     TSubclassOf<ABaseWeapon> DefaultWeaponClass;
@@ -51,4 +50,7 @@ protected:
 
     UPROPERTY(VisibleInstanceOnly, Category = "Weapons")
     TObjectPtr<ABaseWeapon> EquippedWeapon;
+
+private:
+    USceneComponent* GetWeaponAttachComponent() const;
 };

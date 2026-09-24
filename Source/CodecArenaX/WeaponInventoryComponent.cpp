@@ -4,51 +4,83 @@
 #include "SecondaryWeapon.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Pawn.h"
+#include "GameFramework/Character.h"
+#include "Components/SkeletalMeshComponent.h"
 
 UWeaponInventoryComponent::UWeaponInventoryComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
 }
 
-void UWeaponInventoryComponent::EquipDefaultWeapon(USceneComponent* AttachParent)
+USceneComponent* UWeaponInventoryComponent::GetWeaponAttachComponent() const
 {
-    if (!DefaultWeaponClass || DefaultWeapon)
+    ACharacter* CharacterOwner = Cast<ACharacter>(GetOwner());
+
+    if (!CharacterOwner)
     {
-        return;
+        return nullptr;
     }
 
-    AActor* OwnerActor = GetOwner();
-
-    if (!OwnerActor)
-    {
-        return;
-    }
-
-    FActorSpawnParameters SpawnParameters;
-    SpawnParameters.Owner = OwnerActor;
-    SpawnParameters.Instigator = Cast<APawn>(OwnerActor);
-
-    DefaultWeapon = OwnerActor->GetWorld()->SpawnActor<ABaseWeapon>(
-        DefaultWeaponClass,
-        FTransform::Identity,
-        SpawnParameters
-    );
-
-    if (DefaultWeapon)
-    {
-        EquippedWeapon = DefaultWeapon;
-
-        if (AttachParent)
-        {
-            DefaultWeapon->AttachToComponent(
-                AttachParent,
-                FAttachmentTransformRules::SnapToTargetNotIncludingScale
-            );
-        }
-    }
+    return CharacterOwner->GetMesh();
 }
 
-void UWeaponInventoryComponent::AcquireSecondaryWeapon(USceneComponent* AttachParent)
+void UWeaponInventoryComponent::EquipDefaultWeapon()
+{
+    if (!DefaultWeapon)
+    {
+        if (!DefaultWeaponClass)
+        {
+            return;
+        }
+
+        AActor* OwnerActor = GetOwner();
+
+        if (!OwnerActor)
+        {
+            return;
+        }
+
+        FActorSpawnParameters SpawnParameters;
+        SpawnParameters.Owner = OwnerActor;
+        SpawnParameters.Instigator = Cast<APawn>(OwnerActor);
+
+        DefaultWeapon = OwnerActor->GetWorld()->SpawnActor<ABaseWeapon>(
+            DefaultWeaponClass,
+            FTransform::Identity,
+            SpawnParameters
+        );
+
+        if (DefaultWeapon)
+        {
+            USceneComponent* WeaponAttachComponent =
+                GetWeaponAttachComponent();
+
+            if (WeaponAttachComponent)
+            {
+                DefaultWeapon->AttachToComponent(
+                    WeaponAttachComponent,
+                    FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+                    TEXT("WeaponSocket")
+                );
+            }
+        }
+    }
+
+    if (!DefaultWeapon)
+    {
+        return;
+    }
+
+    if (SecondaryWeapon)
+    {
+        SecondaryWeapon->SetActorHiddenInGame(true);
+    }
+
+    DefaultWeapon->SetActorHiddenInGame(false);
+    EquippedWeapon = DefaultWeapon;
+}
+
+void UWeaponInventoryComponent::AcquireSecondaryWeapon()
 {
     if (!SecondaryWeaponClass || SecondaryWeapon)
     {
@@ -72,12 +104,19 @@ void UWeaponInventoryComponent::AcquireSecondaryWeapon(USceneComponent* AttachPa
         SpawnParameters
     );
 
-    if (SecondaryWeapon && AttachParent)
+    if (SecondaryWeapon)
     {
-        SecondaryWeapon->AttachToComponent(
-            AttachParent,
-            FAttachmentTransformRules::SnapToTargetNotIncludingScale
-        );
+        USceneComponent* WeaponAttachComponent =
+            GetWeaponAttachComponent();
+
+        if (WeaponAttachComponent)
+        {
+            SecondaryWeapon->AttachToComponent(
+                WeaponAttachComponent,
+                FAttachmentTransformRules::SnapToTargetNotIncludingScale,
+                TEXT("WeaponSocket")
+            );
+        }
 
         SecondaryWeapon->SetActorHiddenInGame(true);
     }
@@ -126,22 +165,6 @@ FString UWeaponInventoryComponent::GetEquippedAmmoText() const
     }
 
     return TEXT("∞");
-}
-
-void UWeaponInventoryComponent::EquipDefaultWeapon()
-{
-    if (!DefaultWeapon)
-    {
-        return;
-    }
-
-    if (SecondaryWeapon)
-    {
-        SecondaryWeapon->SetActorHiddenInGame(true);
-    }
-
-    DefaultWeapon->SetActorHiddenInGame(false);
-    EquippedWeapon = DefaultWeapon;
 }
 
 void UWeaponInventoryComponent::EquipSecondaryWeapon()

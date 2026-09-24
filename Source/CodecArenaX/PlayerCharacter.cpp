@@ -29,10 +29,7 @@ void APlayerCharacter::BeginPlay()
 
     if (WeaponInventoryComponent)
     {
-        UCameraComponent* CameraComponent =
-            FindComponentByClass<UCameraComponent>();
-
-        WeaponInventoryComponent->EquipDefaultWeapon(CameraComponent);
+        WeaponInventoryComponent->EquipDefaultWeapon();
     }
 }
 

@@ -1,7 +1,6 @@
 #include "WeaponAmmoPickup.h"
 
 #include "Components/StaticMeshComponent.h"
-#include "Camera/CameraComponent.h"
 #include "PlayerCharacter.h"
 #include "WeaponInventoryComponent.h"
 #include "SecondaryWeapon.h"
@@ -46,10 +45,7 @@ void AWeaponAmmoPickup::Interact(APlayerCharacter* PlayerCharacter)
 
     if (!bAlreadyHadSecondary)
     {
-        UCameraComponent* CameraComponent =
-            PlayerCharacter->FindComponentByClass<UCameraComponent>();
-
-        Inventory->AcquireSecondaryWeapon(CameraComponent);
+        Inventory->AcquireSecondaryWeapon();
     }
 
     ABaseWeapon* SecondaryWeaponBase =
