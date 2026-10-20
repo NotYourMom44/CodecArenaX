@@ -1,3 +1,5 @@
+
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -15,6 +17,15 @@ public:
     ABaseCharacter();
 
     virtual void ReceiveDamage(float DamageAmount) override;
+
+    UFUNCTION(Exec)
+    void DebugDamage(float Amount);
+
+    UFUNCTION(BlueprintCallable, Category = "Health")
+    void Heal(float HealAmount);
+
+    UFUNCTION(BlueprintPure, Category = "Health")
+    UHealthComponent* GetHealthComponent() const;
 
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
