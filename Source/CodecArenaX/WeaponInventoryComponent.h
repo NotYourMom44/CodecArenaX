@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -36,6 +37,10 @@ public:
     FString GetEquippedAmmoText() const;
 
 protected:
+    virtual void EndPlay(
+        const EEndPlayReason::Type EndPlayReason
+    ) override;
+
     UPROPERTY(EditDefaultsOnly, Category = "Weapons")
     TSubclassOf<ABaseWeapon> DefaultWeaponClass;
 

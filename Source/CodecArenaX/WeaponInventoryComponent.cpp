@@ -1,3 +1,4 @@
+
 #include "WeaponInventoryComponent.h"
 
 #include "BaseWeapon.h"
@@ -10,6 +11,27 @@
 UWeaponInventoryComponent::UWeaponInventoryComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
+}
+
+void UWeaponInventoryComponent::EndPlay(
+    const EEndPlayReason::Type EndPlayReason
+)
+{
+    if (IsValid(DefaultWeapon))
+    {
+        DefaultWeapon->Destroy();
+    }
+
+    if (IsValid(SecondaryWeapon))
+    {
+        SecondaryWeapon->Destroy();
+    }
+
+    DefaultWeapon = nullptr;
+    SecondaryWeapon = nullptr;
+    EquippedWeapon = nullptr;
+
+    UActorComponent::EndPlay(EndPlayReason);
 }
 
 USceneComponent* UWeaponInventoryComponent::GetWeaponAttachComponent() const

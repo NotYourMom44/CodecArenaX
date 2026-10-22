@@ -25,6 +25,16 @@ void UHealthComponent::TakeDamage(float DamageAmount)
 
     OnHealthChanged.Broadcast(CurrentHealth, MaxHealth);
 
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("HealthComponent: %s health is now %.1f / %.1f after %.1f damage"),
+        *GetNameSafe(GetOwner()),
+        CurrentHealth,
+        MaxHealth,
+        DamageAmount
+    );
+
     if (CurrentHealth <= 0.0f && !bDeathEventSent)
     {
         bDeathEventSent = true;

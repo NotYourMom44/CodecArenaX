@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "BaseWeapon.generated.h"
 
+class AWeaponProjectile;
+
 UCLASS()
 class CODECARENAX_API ABaseWeapon : public AActor
 {
@@ -24,4 +26,7 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
     float Range;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Weapon")
+    TSubclassOf<AWeaponProjectile> ProjectileClass;
 };

@@ -1,10 +1,10 @@
+
 #include "BaseWeapon.h"
 
-#include "Camera/CameraComponent.h"
-#include "Damageable.h"
+#include "WeaponProjectile.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
-#include "NiagaraComponent.h"
 
 ABaseWeapon::ABaseWeapon()
 {
@@ -18,65 +18,68 @@ void ABaseWeapon::Fire()
 {
     APawn* WeaponOwner = Cast<APawn>(GetOwner());
 
-    if (!WeaponOwner)
+    if (!WeaponOwner || !ProjectileClass)
     {
         return;
     }
 
-    UNiagaraComponent* MuzzleFlash = FindComponentByClass<UNiagaraComponent>();
+    USkeletalMeshComponent* WeaponMesh =
+        FindComponentByClass<USkeletalMeshComponent>();
 
-    if (MuzzleFlash)
-    {
-        MuzzleFlash->Deactivate();
-        MuzzleFlash->ResetSystem();
-        MuzzleFlash->Activate(true);
-    }
-
-    UCameraComponent* Camera =
-        WeaponOwner->FindComponentByClass<UCameraComponent>();
-
-    if (!Camera)
+    if (!WeaponMesh)
     {
         return;
     }
 
-    const FVector Start = Camera->GetComponentLocation();
-    const FVector End =
-        Start + (Camera->GetForwardVector() * Range);
+    const FName MuzzleSocketName(TEXT("MuzzleSocket"));
 
-    FHitResult HitResult;
-
-    FCollisionQueryParams QueryParams;
-    QueryParams.AddIgnoredActor(WeaponOwner);
-    QueryParams.AddIgnoredActor(this);
-
-    const bool bHit = GetWorld()->LineTraceSingleByChannel(
-        HitResult,
-        Start,
-        End,
-        ECC_Visibility,
-        QueryParams
-    );
-
-    if (bHit && HitResult.GetActor())
+    if (!WeaponMesh->DoesSocketExist(MuzzleSocketName))
     {
-        if (IDamageable* Damageable =
-            Cast<IDamageable>(HitResult.GetActor()))
-        {
-            Damageable->ReceiveDamage(Damage);
-        }
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("%s: WeaponMesh has no MuzzleSocket."),
+            *GetName()
+        );
+
+        return;
     }
 
-    DrawDebugLine(
-        GetWorld(),
-        Start,
-        End,
-        FColor::Red,
-        false,
-        1.0f,
-        0,
-        2.0f
-    );
+    const FTransform MuzzleTransform =
+        WeaponMesh->GetSocketTransform(
+            MuzzleSocketName,
+            RTS_World
+        );
+
+    const FVector ProjectileDirection =
+        MuzzleTransform.GetUnitAxis(EAxis::X);
+
+    if (ProjectileDirection.IsNearlyZero())
+    {
+        return;
+    }
+
+    FActorSpawnParameters SpawnParameters;
+    SpawnParameters.Owner = WeaponOwner;
+    SpawnParameters.Instigator = WeaponOwner;
+    SpawnParameters.SpawnCollisionHandlingOverride =
+        ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    AWeaponProjectile* Projectile =
+        GetWorld()->SpawnActor<AWeaponProjectile>(
+            ProjectileClass,
+            MuzzleTransform.GetLocation(),
+            ProjectileDirection.Rotation(),
+            SpawnParameters
+        );
+
+    if (Projectile)
+    {
+        Projectile->InitializeProjectile(
+            ProjectileDirection,
+            Damage
+        );
+    }
 }
 
 float ABaseWeapon::GetDamage() const
