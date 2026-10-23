@@ -1,5 +1,6 @@
 #include "BotAIController.h"
 
+#include "HealthComponent.h"
 #include "WeaponInventoryComponent.h"
 #include "BaseWeapon.h"
 #include "BotCharacter.h"
@@ -239,11 +240,72 @@ void ABotAIController::LogNavigationRegistrationState(const TCHAR* Context)
 }
 
 
+
 void ABotAIController::OnMoveCompleted(
     FAIRequestID RequestID,
     const FPathFollowingResult& Result)
 {
     Super::OnMoveCompleted(RequestID, Result);
+
+    // Retreat movement takes priority over patrol and pursuit.
+    if (bIsRetreating)
+    {
+        if (Result.Code == EPathFollowingResult::Success)
+        {
+            bRetreatRetryUsed = false;
+            RetreatFromCombat();
+        }
+        else
+        {
+            const UWorld* World = GetWorld();
+            AActor* RetreatLogTarget = CurrentTarget.Get();
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("RETREAT MOVE DID NOT SUCCEED: Time=%.3f | Pawn=%s | RequestID=%u | Result=%s | Code=%d | Flags=%d | Retreating=%s | RetryUsed=%s | Location=%s | Target=%s | TargetLocation=%s"),
+                World ? World->GetTimeSeconds() : -1.0f,
+                *GetNameSafe(GetPawn()),
+                RequestID.GetID(),
+                *Result.ToString(),
+                static_cast<int32>(Result.Code),
+                static_cast<int32>(Result.Flags),
+                bIsRetreating ? TEXT("YES") : TEXT("NO"),
+                bRetreatRetryUsed ? TEXT("YES") : TEXT("NO"),
+                *GetPawn()->GetActorLocation().ToString(),
+                *GetNameSafe(RetreatLogTarget),
+                IsValid(RetreatLogTarget)
+                ? *RetreatLogTarget->GetActorLocation().ToString()
+                : TEXT("None")
+            );
+
+
+            if (Result.Code == EPathFollowingResult::Blocked &&
+                bIsRetreating &&
+                IsLowOnHealth())
+            {
+                UE_LOG(
+                    LogTemp,
+                    Warning,
+                    TEXT("RETREAT BLOCKED: Trying another destination for %s"),
+                    *GetNameSafe(GetPawn())
+                );
+
+                RetreatFromCombat();
+            }
+            else if (Result.Code == EPathFollowingResult::Aborted &&
+                !bRetreatRetryUsed &&
+                bIsRetreating &&
+                IsLowOnHealth())
+            {
+                bRetreatRetryUsed = true;
+                RetreatFromCombat();
+            }
+
+        }
+
+        return;
+    }
 
     // If we still have a valid combat target, don't resume patrolling.
     if (IsValidCombatTarget(CurrentTarget.Get()))
@@ -259,6 +321,7 @@ void ABotAIController::OnMoveCompleted(
         MoveToRandomPatrolPoint();
     }
 }
+
 
 
 void ABotAIController::MoveToRandomPatrolPoint()
@@ -450,12 +513,19 @@ void ABotAIController::MoveToRandomPatrolPoint()
 }
 
 
+
 void ABotAIController::HandleTargetPerceptionUpdated(
     AActor* Actor,
     FAIStimulus Stimulus
 )
 {
     if (!IsValidCombatTarget(Actor))
+    {
+        return;
+    }
+
+    // Retreating bots must not restart pursuit or combat.
+    if (bIsRetreating)
     {
         return;
     }
@@ -489,10 +559,18 @@ void ABotAIController::HandleTargetPerceptionUpdated(
 
         StopFiringAtTarget();
         CurrentTarget.Reset();
+
+        // Do not cancel retreat movement when a target is lost.
+        if (bIsRetreating)
+        {
+            return;
+        }
+
         StopMovement();
         MoveToRandomPatrolPoint();
     }
 }
+
 
 
 bool ABotAIController::IsValidCombatTarget(AActor* Actor) const
@@ -505,6 +583,326 @@ bool ABotAIController::IsValidCombatTarget(AActor* Actor) const
     return Actor->IsA(APlayerCharacter::StaticClass())
         || Actor->IsA(ABotCharacter::StaticClass());
 }
+
+
+bool ABotAIController::IsLowOnHealth() const
+{
+    const ABaseCharacter* ControlledCharacter =
+        Cast<ABaseCharacter>(GetPawn());
+
+    if (!IsValid(ControlledCharacter))
+    {
+        return false;
+    }
+
+    const UHealthComponent* Health =
+        ControlledCharacter->GetHealthComponent();
+
+    if (!IsValid(Health))
+    {
+        return false;
+    }
+
+    const float MaxHealth = Health->GetMaxHealth();
+
+    if (MaxHealth <= 0.0f)
+    {
+        return false;
+    }
+
+    const float HealthPercentage =
+        Health->GetCurrentHealth() / MaxHealth;
+
+    return HealthPercentage < LowHealthThreshold;
+}
+
+
+
+
+void ABotAIController::RetreatFromCombat()
+{
+    APawn* ControlledPawn = GetPawn();
+    UWorld* World = GetWorld();
+    AActor* Target = CurrentTarget.Get();
+
+    const float Time = World ? World->GetTimeSeconds() : -1.0f;
+
+    if (!IsValid(ControlledPawn))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("RETREAT DIAGNOSTIC: Time=%.3f | No valid controlled pawn"),
+            Time
+        );
+        return;
+    }
+
+    const FVector CurrentLocation = ControlledPawn->GetActorLocation();
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("RETREAT ATTEMPT: Time=%.3f | Pawn=%s | Location=%s | Target=%s | TargetLocation=%s | Retreating=%s | RetryUsed=%s"),
+        Time,
+        *GetNameSafe(ControlledPawn),
+        *CurrentLocation.ToString(),
+        *GetNameSafe(Target),
+        IsValid(Target)
+        ? *Target->GetActorLocation().ToString()
+        : TEXT("None"),
+        bIsRetreating ? TEXT("YES") : TEXT("NO"),
+        bRetreatRetryUsed ? TEXT("YES") : TEXT("NO")
+    );
+
+    if (!IsValid(World))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("RETREAT FAILURE: World is invalid for %s"),
+            *GetNameSafe(ControlledPawn)
+        );
+        return;
+    }
+
+    UNavigationSystemV1* NavigationSystem =
+        FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+
+    if (!IsValid(NavigationSystem))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("RETREAT FAILURE: Navigation system unavailable for %s"),
+            *GetNameSafe(ControlledPawn)
+        );
+        return;
+    }
+
+    FVector AwayDirection = FVector::ZeroVector;
+
+    if (IsValidCombatTarget(Target))
+    {
+        AwayDirection =
+            (CurrentLocation - Target->GetActorLocation()).GetSafeNormal2D();
+    }
+
+    if (AwayDirection.IsNearlyZero())
+    {
+        AwayDirection = FMath::VRand();
+        AwayDirection.Z = 0.0f;
+        AwayDirection.Normalize();
+    }
+
+    const ACharacter* ControlledCharacter =
+        Cast<ACharacter>(ControlledPawn);
+
+    ANavigationData* SelectedNavData = nullptr;
+
+    if (ControlledCharacter)
+    {
+        SelectedNavData = NavigationSystem->GetNavDataForProps(
+            ControlledCharacter->GetNavAgentPropertiesRef(),
+            CurrentLocation,
+            FVector(100.0f, 100.0f, 200.0f)
+        );
+    }
+
+    if (!SelectedNavData)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("RETREAT FAILURE: No compatible nav data | Pawn=%s | Location=%s"),
+            *GetNameSafe(ControlledPawn),
+            *CurrentLocation.ToString()
+        );
+        return;
+    }
+
+
+    const float RetreatDistances[] = {
+        RetreatDistance,
+        RetreatDistance * 0.75f,
+        RetreatDistance * 0.5f
+    };
+
+    const float RetreatYawOffsets[] = {
+        0.0f,
+        45.0f,
+        -45.0f,
+        90.0f,
+        -90.0f
+    };
+
+    int32 ProjectionAttempts = 0;
+    int32 SuccessfulProjections = 0;
+    int32 MoveRequestsFailed = 0;
+
+    for (const float YawOffset : RetreatYawOffsets)
+    {
+        const FVector RetreatDirection =
+            AwayDirection.RotateAngleAxis(YawOffset, FVector::UpVector)
+            .GetSafeNormal2D();
+
+        for (const float Distance : RetreatDistances)
+        {
+            ++ProjectionAttempts;
+
+            const FVector DesiredLocation =
+                CurrentLocation + RetreatDirection * Distance;
+
+            FNavLocation ProjectedLocation;
+
+            const bool bProjected =
+                NavigationSystem->ProjectPointToNavigation(
+                    DesiredLocation,
+                    ProjectedLocation,
+                    FVector(500.0f, 500.0f, 300.0f),
+                    SelectedNavData
+                );
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("RETREAT CANDIDATE: Time=%.3f | Pawn=%s | YawOffset=%.1f | Distance=%.1f | Desired=%s | Projected=%s | Result=%s"),
+                World->GetTimeSeconds(),
+                *GetNameSafe(ControlledPawn),
+                YawOffset,
+                Distance,
+                *DesiredLocation.ToString(),
+                bProjected ? *ProjectedLocation.Location.ToString() : TEXT("None"),
+                bProjected ? TEXT("SUCCESS") : TEXT("FAILED")
+            );
+
+            if (!bProjected)
+            {
+                continue;
+            }
+
+            ++SuccessfulProjections;
+
+            // Only accept destinations that do not bring the bot closer
+            // to its current combat target.
+            if (IsValidCombatTarget(Target))
+            {
+                const float CurrentTargetDistance =
+                    FVector::Dist2D(
+                        CurrentLocation,
+                        Target->GetActorLocation()
+                    );
+
+                const float ProjectedTargetDistance =
+                    FVector::Dist2D(
+                        ProjectedLocation.Location,
+                        Target->GetActorLocation()
+                    );
+
+                if (ProjectedTargetDistance <= CurrentTargetDistance)
+                {
+                    UE_LOG(
+                        LogTemp,
+                        Warning,
+                        TEXT("RETREAT CANDIDATE REJECTED: Time=%.3f | Pawn=%s | YawOffset=%.1f | Destination does not increase target distance"),
+                        World->GetTimeSeconds(),
+                        *GetNameSafe(ControlledPawn),
+                        YawOffset
+                    );
+
+                    continue;
+                }
+            }
+
+            const EPathFollowingRequestResult::Type MoveResult =
+                MoveToLocation(ProjectedLocation.Location, 100.0f);
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("RETREAT MOVE REQUEST: Time=%.3f | Pawn=%s | YawOffset=%.1f | Result=%d | Destination=%s"),
+                World->GetTimeSeconds(),
+                *GetNameSafe(ControlledPawn),
+                YawOffset,
+                static_cast<int32>(MoveResult),
+                *ProjectedLocation.Location.ToString()
+            );
+
+            if (MoveResult != EPathFollowingRequestResult::Failed)
+            {
+                UE_LOG(
+                    LogTemp,
+                    Warning,
+                    TEXT("RETREAT DESTINATION ACCEPTED: Time=%.3f | Pawn=%s | YawOffset=%.1f | Destination=%s"),
+                    World->GetTimeSeconds(),
+                    *GetNameSafe(ControlledPawn),
+                    YawOffset,
+                    *ProjectedLocation.Location.ToString()
+                );
+
+                return;
+            }
+
+            ++MoveRequestsFailed;
+        }
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("RETREAT FAILURE: No destination accepted | Time=%.3f | Pawn=%s | Location=%s | ProjectionAttempts=%d | SuccessfulProjections=%d | FailedMoveRequests=%d"),
+        World->GetTimeSeconds(),
+        *GetNameSafe(ControlledPawn),
+        *ControlledPawn->GetActorLocation().ToString(),
+        ProjectionAttempts,
+        SuccessfulProjections,
+        MoveRequestsFailed
+
+
+    );
+
+    bRetreatFailed = true;
+    bIsRetreating = false;
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("BOT RETREAT FAILED: %s will defend itself"),
+        *GetNameSafe(ControlledPawn)
+    );
+
+}
+
+
+
+void ABotAIController::StopRetreating()
+{
+    if (!bIsRetreating)
+    {
+        return;
+    }
+
+    bIsRetreating = false;
+    bRetreatFailed = false;
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("BOT RETREAT ENDED: %s health recovered above 25%%"),
+        *GetNameSafe(GetPawn())
+    );
+
+    if (IsValidCombatTarget(CurrentTarget.Get()))
+    {
+        PursueCurrentTarget();
+    }
+    else
+    {
+        MoveToRandomPatrolPoint();
+    }
+}
+
+
 
 
 void ABotAIController::PursueCurrentTarget()
@@ -542,6 +940,8 @@ void ABotAIController::StopFiringAtTarget()
     GetWorldTimerManager().ClearTimer(CombatFireTimerHandle);
 }
 
+
+
 void ABotAIController::FireAtCurrentTarget()
 {
     AActor* Target = CurrentTarget.Get();
@@ -549,6 +949,32 @@ void ABotAIController::FireAtCurrentTarget()
     if (!IsValidCombatTarget(Target))
     {
         StopFiringAtTarget();
+        return;
+    }
+
+    // While retreating, keep checking health without firing.
+    if (bIsRetreating)
+    {
+        if (IsLowOnHealth())
+        {
+            return;
+        }
+
+        // Health has recovered above the retreat threshold.
+        StopRetreating();
+    }
+    else if (IsLowOnHealth() && !bRetreatFailed)
+    {
+        bIsRetreating = true;
+
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("BOT RETREAT STARTED: %s health is below 25%%"),
+            *GetNameSafe(GetPawn())
+        );
+
+        RetreatFromCombat();
         return;
     }
 
@@ -580,3 +1006,5 @@ void ABotAIController::FireAtCurrentTarget()
         );
     }
 }
+
+

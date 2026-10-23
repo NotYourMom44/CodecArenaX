@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -58,6 +59,20 @@ private:
     FTimerHandle CombatFireTimerHandle;
 
     static constexpr float CombatFireIntervalSeconds = 1.0f;
+
+    // Low-health retreat behaviour.
+    bool IsLowOnHealth() const;
+
+    bool bRetreatRetryUsed = false;
+    bool bRetreatFailed = false;
+
+    void RetreatFromCombat();
+    void StopRetreating();
+
+    bool bIsRetreating = false;
+
+    static constexpr float LowHealthThreshold = 0.25f;
+    static constexpr float RetreatDistance = 1500.0f;
 
     UFUNCTION()
     void HandleTargetPerceptionUpdated(
