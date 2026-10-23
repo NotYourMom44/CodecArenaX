@@ -82,6 +82,75 @@ void ABaseWeapon::Fire()
     }
 }
 
+bool ABaseWeapon::FireAtTarget(AActor* Target)
+{
+    APawn* WeaponOwner = Cast<APawn>(GetOwner());
+
+    if (!WeaponOwner || !IsValid(Target) || !ProjectileClass)
+    {
+        return false;
+    }
+
+    USkeletalMeshComponent* WeaponMesh =
+        FindComponentByClass<USkeletalMeshComponent>();
+
+    if (!WeaponMesh)
+    {
+        return false;
+    }
+
+    const FName MuzzleSocketName(TEXT("MuzzleSocket"));
+
+    if (!WeaponMesh->DoesSocketExist(MuzzleSocketName))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("%s: WeaponMesh has no MuzzleSocket."),
+            *GetName()
+        );
+
+        return false;
+    }
+
+    const FTransform MuzzleTransform =
+        WeaponMesh->GetSocketTransform(
+            MuzzleSocketName,
+            RTS_World
+        );
+
+    const FVector Direction =
+        (Target->GetActorLocation() - MuzzleTransform.GetLocation())
+        .GetSafeNormal();
+
+    if (Direction.IsNearlyZero())
+    {
+        return false;
+    }
+
+    FActorSpawnParameters SpawnParameters;
+    SpawnParameters.Owner = WeaponOwner;
+    SpawnParameters.Instigator = WeaponOwner;
+    SpawnParameters.SpawnCollisionHandlingOverride =
+        ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+    AWeaponProjectile* Projectile =
+        GetWorld()->SpawnActor<AWeaponProjectile>(
+            ProjectileClass,
+            MuzzleTransform.GetLocation(),
+            Direction.Rotation(),
+            SpawnParameters
+        );
+
+    if (Projectile)
+    {
+        Projectile->InitializeProjectile(Direction, Damage);
+        return true;
+    }
+
+    return false;
+}
+
 float ABaseWeapon::GetDamage() const
 {
     return Damage;

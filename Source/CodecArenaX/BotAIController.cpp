@@ -1,5 +1,9 @@
 #include "BotAIController.h"
 
+#include "WeaponInventoryComponent.h"
+#include "BaseWeapon.h"
+#include "BotCharacter.h"
+#include "PlayerCharacter.h"
 #include "NavigationSystem.h"
 #include "NavigationData.h"
 #include "Navigation/PathFollowingComponent.h"
@@ -8,6 +12,40 @@
 #include "Components/CapsuleComponent.h"
 #include "EngineUtils.h"
 #include "TimerManager.h"
+#include "Perception/AIPerceptionComponent.h"
+#include "Perception/AISenseConfig_Sight.h"
+#include "Perception/AISense_Sight.h"
+
+ABotAIController::ABotAIController()
+{
+    AIPerception =
+        CreateDefaultSubobject<UAIPerceptionComponent>(
+            TEXT("AIPerception")
+        );
+
+    SightConfig =
+        CreateDefaultSubobject<UAISenseConfig_Sight>(
+            TEXT("SightConfig")
+        );
+
+    SightConfig->SightRadius = 2000.0f;
+    SightConfig->LoseSightRadius = 2500.0f;
+    SightConfig->PeripheralVisionAngleDegrees = 70.0f;
+
+    SightConfig->DetectionByAffiliation.bDetectEnemies = true;
+    SightConfig->DetectionByAffiliation.bDetectFriendlies = true;
+    SightConfig->DetectionByAffiliation.bDetectNeutrals = true;
+
+    AIPerception->ConfigureSense(*SightConfig);
+    AIPerception->SetDominantSense(
+        UAISense_Sight::StaticClass()
+    );
+
+    AIPerception->OnTargetPerceptionUpdated.AddDynamic(
+        this,
+        &ABotAIController::HandleTargetPerceptionUpdated
+    );
+}
 
 void ABotAIController::OnPossess(APawn* InPawn)
 {
@@ -200,17 +238,28 @@ void ABotAIController::LogNavigationRegistrationState(const TCHAR* Context)
     }
 }
 
+
 void ABotAIController::OnMoveCompleted(
     FAIRequestID RequestID,
     const FPathFollowingResult& Result)
 {
     Super::OnMoveCompleted(RequestID, Result);
 
+    // If we still have a valid combat target, don't resume patrolling.
+    if (IsValidCombatTarget(CurrentTarget.Get()))
+    {
+        return;
+    }
+
+    // Clear any stale target before returning to patrol.
+    CurrentTarget.Reset();
+
     if (Result.Code == EPathFollowingResult::Success)
     {
         MoveToRandomPatrolPoint();
     }
 }
+
 
 void ABotAIController::MoveToRandomPatrolPoint()
 {
@@ -398,4 +447,136 @@ void ABotAIController::MoveToRandomPatrolPoint()
     );
 
     MoveToLocation(RandomLocation.Location, 100.0f);
+}
+
+
+void ABotAIController::HandleTargetPerceptionUpdated(
+    AActor* Actor,
+    FAIStimulus Stimulus
+)
+{
+    if (!IsValidCombatTarget(Actor))
+    {
+        return;
+    }
+
+    if (Stimulus.WasSuccessfullySensed())
+    {
+        if (!IsValidCombatTarget(CurrentTarget.Get()))
+        {
+            CurrentTarget = Actor;
+            PursueCurrentTarget();
+            StartFiringAtTarget();
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("BOT TARGET SELECTED: %s is pursuing %s"),
+                *GetNameSafe(GetPawn()),
+                *GetNameSafe(Actor)
+            );
+        }
+    }
+    else if (CurrentTarget.Get() == Actor)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("BOT TARGET LOST: %s lost sight of %s"),
+            *GetNameSafe(GetPawn()),
+            *GetNameSafe(Actor)
+        );
+
+        StopFiringAtTarget();
+        CurrentTarget.Reset();
+        StopMovement();
+        MoveToRandomPatrolPoint();
+    }
+}
+
+
+bool ABotAIController::IsValidCombatTarget(AActor* Actor) const
+{
+    if (!IsValid(Actor) || Actor == GetPawn())
+    {
+        return false;
+    }
+
+    return Actor->IsA(APlayerCharacter::StaticClass())
+        || Actor->IsA(ABotCharacter::StaticClass());
+}
+
+
+void ABotAIController::PursueCurrentTarget()
+{
+    AActor* Target = CurrentTarget.Get();
+
+    if (!IsValidCombatTarget(Target))
+    {
+        CurrentTarget.Reset();
+        return;
+    }
+
+    MoveToActor(Target, 300.0f, true);
+}
+
+void ABotAIController::StartFiringAtTarget()
+{
+    if (!IsValidCombatTarget(CurrentTarget.Get()))
+    {
+        return;
+    }
+
+    GetWorldTimerManager().SetTimer(
+        CombatFireTimerHandle,
+        this,
+        &ABotAIController::FireAtCurrentTarget,
+        CombatFireIntervalSeconds,
+        true,
+        0.0f
+    );
+}
+
+void ABotAIController::StopFiringAtTarget()
+{
+    GetWorldTimerManager().ClearTimer(CombatFireTimerHandle);
+}
+
+void ABotAIController::FireAtCurrentTarget()
+{
+    AActor* Target = CurrentTarget.Get();
+
+    if (!IsValidCombatTarget(Target))
+    {
+        StopFiringAtTarget();
+        return;
+    }
+
+    ABotCharacter* Bot = Cast<ABotCharacter>(GetPawn());
+
+    if (!IsValid(Bot) || !IsValid(Bot->WeaponInventory))
+    {
+        return;
+    }
+
+    ABaseWeapon* Weapon =
+        Bot->WeaponInventory->GetEquippedWeapon();
+
+    if (!IsValid(Weapon))
+    {
+        return;
+    }
+
+    const bool bFired = Weapon->FireAtTarget(Target);
+
+    if (bFired)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("BOT FIRED: %s fired at %s"),
+            *GetNameSafe(Bot),
+            *GetNameSafe(Target)
+        );
+    }
 }

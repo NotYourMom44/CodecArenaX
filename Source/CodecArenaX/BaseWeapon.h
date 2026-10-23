@@ -17,6 +17,8 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Weapon")
     virtual void Fire();
 
+    virtual bool FireAtTarget(AActor* Target);
+
     UFUNCTION(BlueprintPure, Category = "Weapon")
     float GetDamage() const;
 

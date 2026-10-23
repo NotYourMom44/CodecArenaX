@@ -14,6 +14,8 @@ public:
 
     virtual void Fire() override;
 
+    virtual bool FireAtTarget(AActor* Target) override;
+
     UFUNCTION(BlueprintPure, Category = "Weapon")
     int32 GetCurrentAmmo() const;
 

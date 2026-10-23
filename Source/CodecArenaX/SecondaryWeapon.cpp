@@ -20,6 +20,22 @@ void ASecondaryWeapon::Fire()
     CurrentAmmo--;
 }
 
+bool ASecondaryWeapon::FireAtTarget(AActor* Target)
+{
+    if (CurrentAmmo <= 0)
+    {
+        return false;
+    }
+
+    if (Super::FireAtTarget(Target))
+    {
+        CurrentAmmo--;
+        return true;
+    }
+
+    return false;
+}
+
 int32 ASecondaryWeapon::GetCurrentAmmo() const
 {
     return CurrentAmmo;
