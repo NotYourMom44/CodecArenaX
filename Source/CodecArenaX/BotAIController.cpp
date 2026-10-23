@@ -2,8 +2,11 @@
 
 #include "HealthComponent.h"
 #include "HealthPickup.h"
+#include "WeaponAmmoPickup.h"
 #include "WeaponInventoryComponent.h"
+#include "SecondaryWeapon.h"
 #include "BaseWeapon.h"
+#include "SecondaryWeapon.h"
 #include "BotCharacter.h"
 #include "PlayerCharacter.h"
 #include "NavigationSystem.h"
@@ -369,6 +372,58 @@ void ABotAIController::OnMoveCompleted(
         return;
     }
 
+    // Handle movement that was targeting an ammo pickup.
+    if (bSeekingAmmoPickup)
+    {
+        AWeaponAmmoPickup* Pickup = CurrentAmmoPickup.Get();
+
+        if (!IsValid(Pickup) ||
+            Pickup->IsHidden() ||
+            !Pickup->GetActorEnableCollision())
+        {
+            bSeekingAmmoPickup = false;
+            CurrentAmmoPickup.Reset();
+            MoveToRandomPatrolPoint();
+            return;
+        }
+
+        if (Result.Code == EPathFollowingResult::Success)
+        {
+            ABotCharacter* Bot = Cast<ABotCharacter>(GetPawn());
+
+            if (IsValid(Bot))
+            {
+                // Collect the pickup without requiring player input.
+                Pickup->Interact(Bot);
+            }
+
+            bSeekingAmmoPickup = false;
+            CurrentAmmoPickup.Reset();
+
+            MoveToRandomPatrolPoint();
+        }
+        else
+        {
+            // Avoid repeatedly choosing the same unreachable pickup.
+            FailedAmmoPickup = Pickup;
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("BOT AMMO SEEK FAILED: %s could not reach %s"),
+                *GetNameSafe(GetPawn()),
+                *GetNameSafe(Pickup)
+            );
+
+            bSeekingAmmoPickup = false;
+            CurrentAmmoPickup.Reset();
+
+            MoveToRandomPatrolPoint();
+        }
+
+        return;
+    }
+
     // If we still have a valid combat target, don't resume patrolling.
     if (IsValidCombatTarget(CurrentTarget.Get()))
     {
@@ -404,6 +459,14 @@ void ABotAIController::MoveToRandomPatrolPoint()
     TrySeekHealthPickup();
 
     if (bSeekingHealthPickup)
+    {
+        return;
+    }
+
+    // Seek an ammo pickup if needed before continuing patrol.
+    TrySeekAmmoPickup();
+
+    if (bSeekingAmmoPickup)
     {
         return;
     }
@@ -730,6 +793,161 @@ void ABotAIController::TrySeekHealthPickup()
         bSeekingHealthPickup = false;
     }
 }
+
+
+void ABotAIController::TrySeekAmmoPickup()
+{
+    APawn* ControlledPawn = GetPawn();
+
+    if (!IsValid(ControlledPawn) ||
+        bIsRetreating ||
+        bSeekingHealthPickup ||
+        bSeekingAmmoPickup ||
+        CurrentTarget.IsValid())
+    {
+        return;
+    }
+
+    ABotCharacter* Bot = Cast<ABotCharacter>(ControlledPawn);
+
+    if (!IsValid(Bot) || !IsValid(Bot->WeaponInventory))
+    {
+        return;
+    }
+
+    UWeaponInventoryComponent* Inventory = Bot->WeaponInventory;
+
+    ASecondaryWeapon* SecondaryWeapon =
+        Cast<ASecondaryWeapon>(Inventory->GetSecondaryWeapon());
+
+    // Seek a pickup if the bot has no secondary weapon,
+    // or if its secondary ammunition is below half capacity.
+    if (IsValid(SecondaryWeapon))
+    {
+        const int32 MaxAmmo = SecondaryWeapon->GetMaxAmmo();
+        const int32 CurrentAmmo = SecondaryWeapon->GetCurrentAmmo();
+
+        if (MaxAmmo > 0 && CurrentAmmo >= MaxAmmo / 2)
+        {
+            return;
+        }
+    }
+
+    UWorld* World = GetWorld();
+
+    if (!IsValid(World))
+    {
+        return;
+    }
+
+    UNavigationSystemV1* NavigationSystem =
+        FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+
+    if (!IsValid(NavigationSystem))
+    {
+        return;
+    }
+
+    ACharacter* ControlledCharacter =
+        Cast<ACharacter>(ControlledPawn);
+
+    if (!ControlledCharacter)
+    {
+        return;
+    }
+
+    const FNavAgentProperties& AgentProperties =
+        ControlledCharacter->GetNavAgentPropertiesRef();
+
+    ANavigationData* NavData = NavigationSystem->GetNavDataForProps(
+        AgentProperties,
+        ControlledPawn->GetActorLocation(),
+        FVector(100.0f, 100.0f, 200.0f)
+    );
+
+    if (!NavData)
+    {
+        return;
+    }
+
+    AWeaponAmmoPickup* BestPickup = nullptr;
+    FVector BestLocation = FVector::ZeroVector;
+    float BestDistanceSquared = TNumericLimits<float>::Max();
+
+    for (TActorIterator<AWeaponAmmoPickup> It(World); It; ++It)
+    {
+        AWeaponAmmoPickup* Pickup = *It;
+
+        if (!IsValid(Pickup) ||
+            Pickup == FailedAmmoPickup.Get() ||
+            Pickup->IsHidden() ||
+            !Pickup->GetActorEnableCollision())
+        {
+            continue;
+        }
+
+        FNavLocation ProjectedPickupLocation;
+
+        const bool bProjected =
+            NavigationSystem->ProjectPointToNavigation(
+                Pickup->GetActorLocation(),
+                ProjectedPickupLocation,
+                FVector(150.0f, 150.0f, 250.0f),
+                NavData
+            );
+
+        if (!bProjected)
+        {
+            continue;
+        }
+
+        const float DistanceSquared = FVector::DistSquared(
+            ControlledPawn->GetActorLocation(),
+            ProjectedPickupLocation.Location
+        );
+
+        if (DistanceSquared < BestDistanceSquared)
+        {
+            BestDistanceSquared = DistanceSquared;
+            BestPickup = Pickup;
+            BestLocation = ProjectedPickupLocation.Location;
+        }
+    }
+
+    if (!IsValid(BestPickup))
+    {
+        return;
+    }
+
+    CurrentAmmoPickup = BestPickup;
+    bSeekingAmmoPickup = true;
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("BOT SEEKING AMMO: %s -> %s"),
+        *GetNameSafe(ControlledPawn),
+        *GetNameSafe(BestPickup)
+    );
+
+    const EPathFollowingRequestResult::Type MoveResult =
+        MoveToLocation(BestLocation, 100.0f);
+
+    if (MoveResult != EPathFollowingRequestResult::RequestSuccessful &&
+        MoveResult != EPathFollowingRequestResult::AlreadyAtGoal)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("BOT AMMO SEEK FAILED: %s"),
+            *GetNameSafe(ControlledPawn)
+        );
+
+        CurrentAmmoPickup.Reset();
+        bSeekingAmmoPickup = false;
+    }
+}
+
 
 
 
@@ -1206,6 +1424,23 @@ void ABotAIController::FireAtCurrentTarget()
     if (!IsValid(Bot) || !IsValid(Bot->WeaponInventory))
     {
         return;
+    }
+
+    // Use the secondary weapon while it has ammunition.
+    // Otherwise, fall back to the default weapon.
+    ASecondaryWeapon* SecondaryWeapon =
+        Cast<ASecondaryWeapon>(
+            Bot->WeaponInventory->GetSecondaryWeapon()
+        );
+
+    if (IsValid(SecondaryWeapon) &&
+        SecondaryWeapon->GetCurrentAmmo() > 0)
+    {
+        Bot->WeaponInventory->EquipSecondaryWeapon();
+    }
+    else
+    {
+        Bot->WeaponInventory->EquipDefaultWeapon();
     }
 
     ABaseWeapon* Weapon =

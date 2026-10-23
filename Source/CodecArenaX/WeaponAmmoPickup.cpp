@@ -1,7 +1,7 @@
 #include "WeaponAmmoPickup.h"
 
 #include "Components/StaticMeshComponent.h"
-#include "PlayerCharacter.h"
+#include "BaseCharacter.h"
 #include "WeaponInventoryComponent.h"
 #include "SecondaryWeapon.h"
 
@@ -25,15 +25,15 @@ AWeaponAmmoPickup::AWeaponAmmoPickup()
     AmmoAmount = 12;
 }
 
-void AWeaponAmmoPickup::Interact(APlayerCharacter* PlayerCharacter)
+void AWeaponAmmoPickup::Interact(ABaseCharacter* Character)
 {
-    if (!PlayerCharacter)
+    if (!Character)
     {
         return;
     }
 
     UWeaponInventoryComponent* Inventory =
-        PlayerCharacter->FindComponentByClass<UWeaponInventoryComponent>();
+        Character->FindComponentByClass<UWeaponInventoryComponent>();
 
     if (!Inventory)
     {

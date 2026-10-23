@@ -55,6 +55,14 @@ private:
 
     void TrySeekHealthPickup();
 
+    // Ammo-pickup seeking while patrolling.
+    TWeakObjectPtr<class AWeaponAmmoPickup> CurrentAmmoPickup;
+    TWeakObjectPtr<class AWeaponAmmoPickup> FailedAmmoPickup;
+
+    bool bSeekingAmmoPickup = false;
+
+    void TrySeekAmmoPickup();
+
     bool IsValidCombatTarget(AActor* Actor) const;
 
     void PursueCurrentTarget();

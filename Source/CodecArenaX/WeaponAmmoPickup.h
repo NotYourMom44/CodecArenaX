@@ -5,7 +5,7 @@
 #include "WeaponAmmoPickup.generated.h"
 
 class UStaticMeshComponent;
-class APlayerCharacter;
+class ABaseCharacter;
 
 UCLASS()
 class CODECARENAX_API AWeaponAmmoPickup : public AActor
@@ -16,7 +16,7 @@ public:
     AWeaponAmmoPickup();
 
     UFUNCTION(BlueprintCallable, Category = "Pickup")
-    void Interact(APlayerCharacter* PlayerCharacter);
+    void Interact(ABaseCharacter* Character);
 
 protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
