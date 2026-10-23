@@ -1,6 +1,7 @@
 #include "BotAIController.h"
 
 #include "HealthComponent.h"
+#include "HealthPickup.h"
 #include "WeaponInventoryComponent.h"
 #include "BaseWeapon.h"
 #include "BotCharacter.h"
@@ -307,6 +308,67 @@ void ABotAIController::OnMoveCompleted(
         return;
     }
 
+    // Handle movement that was targeting a health pickup.
+    if (bSeekingHealthPickup)
+    {
+        AHealthPickup* Pickup = CurrentHealthPickup.Get();
+
+        // Stop seeking if the pickup disappeared or became inactive.
+        if (!IsValid(Pickup) ||
+            Pickup->IsHidden() ||
+            !Pickup->GetActorEnableCollision())
+        {
+            bSeekingHealthPickup = false;
+            CurrentHealthPickup.Reset();
+
+            if (Result.Code == EPathFollowingResult::Success)
+            {
+                TrySeekHealthPickup();
+
+                if (!bSeekingHealthPickup)
+                {
+                    MoveToRandomPatrolPoint();
+                }
+            }
+
+            return;
+        }
+
+        // Reached the pickup's destination; allow overlap to heal the bot.
+        if (Result.Code == EPathFollowingResult::Success)
+        {
+            bSeekingHealthPickup = false;
+            CurrentHealthPickup.Reset();
+
+            TrySeekHealthPickup();
+
+            if (!bSeekingHealthPickup)
+            {
+                MoveToRandomPatrolPoint();
+            }
+        }
+        else
+        {
+            // Avoid immediately selecting the same unreachable pickup.
+            FailedHealthPickup = Pickup;
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("BOT HEALTH SEEK FAILED: %s could not reach %s"),
+                *GetNameSafe(GetPawn()),
+                *GetNameSafe(Pickup)
+            );
+
+            bSeekingHealthPickup = false;
+            CurrentHealthPickup.Reset();
+
+            MoveToRandomPatrolPoint();
+        }
+
+        return;
+    }
+
     // If we still have a valid combat target, don't resume patrolling.
     if (IsValidCombatTarget(CurrentTarget.Get()))
     {
@@ -335,6 +397,14 @@ void ABotAIController::MoveToRandomPatrolPoint()
             Warning,
             TEXT("PATROL DIAGNOSTIC: Controller has no pawn.")
         );
+        return;
+    }
+
+    // Seek an active health pickup before continuing patrol.
+    TrySeekHealthPickup();
+
+    if (bSeekingHealthPickup)
+    {
         return;
     }
 
@@ -512,6 +582,155 @@ void ABotAIController::MoveToRandomPatrolPoint()
     MoveToLocation(RandomLocation.Location, 100.0f);
 }
 
+void ABotAIController::TrySeekHealthPickup()
+{
+    APawn* ControlledPawn = GetPawn();
+
+    if (!IsValid(ControlledPawn) ||
+        bIsRetreating ||
+        bSeekingHealthPickup ||
+        CurrentTarget.IsValid())
+    {
+        return;
+    }
+
+    ABaseCharacter* BotCharacter = Cast<ABaseCharacter>(ControlledPawn);
+
+    if (!IsValid(BotCharacter))
+    {
+        return;
+    }
+
+    UHealthComponent* Health = BotCharacter->GetHealthComponent();
+
+    if (!IsValid(Health) || !Health->IsAlive())
+    {
+        return;
+    }
+
+    const float MaxHealth = Health->GetMaxHealth();
+
+    if (MaxHealth <= 0.0f ||
+        Health->GetCurrentHealth() >= MaxHealth * 0.75f)
+    {
+        return;
+    }
+
+    UWorld* World = GetWorld();
+
+    if (!IsValid(World))
+    {
+        return;
+    }
+
+    UNavigationSystemV1* NavigationSystem =
+        FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+
+    if (!IsValid(NavigationSystem))
+    {
+        return;
+    }
+
+    const ACharacter* ControlledCharacter =
+        Cast<ACharacter>(ControlledPawn);
+
+    if (!ControlledCharacter)
+    {
+        return;
+    }
+
+    const FNavAgentProperties& AgentProperties =
+        ControlledCharacter->GetNavAgentPropertiesRef();
+
+    ANavigationData* NavData = NavigationSystem->GetNavDataForProps(
+        AgentProperties,
+        ControlledPawn->GetActorLocation(),
+        FVector(100.0f, 100.0f, 200.0f)
+    );
+
+    if (!NavData)
+    {
+        return;
+    }
+
+    AHealthPickup* BestPickup = nullptr;
+    FVector BestLocation = FVector::ZeroVector;
+
+    float BestDistanceSquared = TNumericLimits<float>::Max();
+
+    for (TActorIterator<AHealthPickup> It(World); It; ++It)
+    {
+        AHealthPickup* Pickup = *It;
+
+        if (!IsValid(Pickup) ||
+            Pickup == FailedHealthPickup.Get() ||
+            Pickup->IsHidden() ||
+            !Pickup->GetActorEnableCollision())
+        {
+            continue;
+        }
+
+        FNavLocation ProjectedPickupLocation;
+
+        const bool bProjected = NavigationSystem->ProjectPointToNavigation(
+            Pickup->GetActorLocation(),
+            ProjectedPickupLocation,
+            FVector(150.0f, 150.0f, 250.0f),
+            NavData
+        );
+
+        if (!bProjected)
+        {
+            continue;
+        }
+
+        const float DistanceSquared = FVector::DistSquared(
+            ControlledPawn->GetActorLocation(),
+            ProjectedPickupLocation.Location
+        );
+
+        if (DistanceSquared < BestDistanceSquared)
+        {
+            BestDistanceSquared = DistanceSquared;
+            BestPickup = Pickup;
+            BestLocation = ProjectedPickupLocation.Location;
+        }
+    }
+
+    if (!IsValid(BestPickup))
+    {
+        return;
+    }
+
+    CurrentHealthPickup = BestPickup;
+    bSeekingHealthPickup = true;
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("BOT SEEKING HEALTH: %s -> %s"),
+        *GetNameSafe(ControlledPawn),
+        *GetNameSafe(BestPickup)
+    );
+
+    const EPathFollowingRequestResult::Type MoveResult =
+        MoveToLocation(BestLocation, 100.0f);
+
+    if (MoveResult != EPathFollowingRequestResult::RequestSuccessful &&
+        MoveResult != EPathFollowingRequestResult::AlreadyAtGoal)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("BOT HEALTH SEEK FAILED: %s"),
+            *GetNameSafe(ControlledPawn)
+        );
+
+        CurrentHealthPickup.Reset();
+        bSeekingHealthPickup = false;
+    }
+}
+
 
 
 void ABotAIController::HandleTargetPerceptionUpdated(
@@ -534,6 +753,10 @@ void ABotAIController::HandleTargetPerceptionUpdated(
     {
         if (!IsValidCombatTarget(CurrentTarget.Get()))
         {
+            // Combat takes priority over health seeking.
+            bSeekingHealthPickup = false;
+            CurrentHealthPickup.Reset();
+
             CurrentTarget = Actor;
             PursueCurrentTarget();
             StartFiringAtTarget();

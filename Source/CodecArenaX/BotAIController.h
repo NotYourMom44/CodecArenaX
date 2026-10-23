@@ -47,6 +47,14 @@ private:
 
     TWeakObjectPtr<AActor> CurrentTarget;
 
+    // Health-pickup seeking while patrolling.
+    TWeakObjectPtr<class AHealthPickup> CurrentHealthPickup;
+    TWeakObjectPtr<class AHealthPickup> FailedHealthPickup;
+
+    bool bSeekingHealthPickup = false;
+
+    void TrySeekHealthPickup();
+
     bool IsValidCombatTarget(AActor* Actor) const;
 
     void PursueCurrentTarget();
