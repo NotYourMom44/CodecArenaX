@@ -87,8 +87,13 @@ private:
 
     bool bIsRetreating = false;
 
+    bool bIssuingRetreatMove = false;
+
     static constexpr float LowHealthThreshold = 0.25f;
     static constexpr float RetreatDistance = 1500.0f;
+
+    // Keep retreat destinations safely inside the arena.
+    static constexpr float RetreatArenaBoundary = 3400.0f;
 
     UFUNCTION()
     void HandleTargetPerceptionUpdated(

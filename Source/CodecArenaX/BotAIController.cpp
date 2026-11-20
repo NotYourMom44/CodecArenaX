@@ -326,12 +326,7 @@ void ABotAIController::OnMoveCompleted(
 
             if (Result.Code == EPathFollowingResult::Success)
             {
-                TrySeekHealthPickup();
-
-                if (!bSeekingHealthPickup)
-                {
-                    MoveToRandomPatrolPoint();
-                }
+                MoveToRandomPatrolPoint();
             }
 
             return;
@@ -343,12 +338,8 @@ void ABotAIController::OnMoveCompleted(
             bSeekingHealthPickup = false;
             CurrentHealthPickup.Reset();
 
-            TrySeekHealthPickup();
-
-            if (!bSeekingHealthPickup)
-            {
-                MoveToRandomPatrolPoint();
-            }
+            // The pickup's overlap event will handle healing.
+            // Do not immediately search for another pickup here.
         }
         else
         {
@@ -443,6 +434,12 @@ void ABotAIController::OnMoveCompleted(
 
 void ABotAIController::MoveToRandomPatrolPoint()
 {
+    // Do not patrol or seek pickups while retreating.
+    if (bIsRetreating)
+    {
+        return;
+    }
+
     APawn* ControlledPawn = GetPawn();
 
     if (!ControlledPawn)
@@ -777,7 +774,7 @@ void ABotAIController::TrySeekHealthPickup()
     );
 
     const EPathFollowingRequestResult::Type MoveResult =
-        MoveToLocation(BestLocation, 100.0f);
+        MoveToLocation(BestLocation, 5.0f, false);
 
     if (MoveResult != EPathFollowingRequestResult::RequestSuccessful &&
         MoveResult != EPathFollowingRequestResult::AlreadyAtGoal)
@@ -1062,6 +1059,12 @@ bool ABotAIController::IsLowOnHealth() const
 
 void ABotAIController::RetreatFromCombat()
 {
+    // Prevent navigation callbacks from recursively issuing retreat moves.
+    if (bIssuingRetreatMove)
+    {
+        return;
+    }
+
     APawn* ControlledPawn = GetPawn();
     UWorld* World = GetWorld();
     AActor* Target = CurrentTarget.Get();
@@ -1224,6 +1227,20 @@ void ABotAIController::RetreatFromCombat()
 
             ++SuccessfulProjections;
 
+            // Reject destinations outside the safe interior of the arena.
+            if (FMath::Abs(ProjectedLocation.Location.X) > RetreatArenaBoundary ||
+                FMath::Abs(ProjectedLocation.Location.Y) > RetreatArenaBoundary)
+            {
+                UE_LOG(
+                    LogTemp,
+                    Warning,
+                    TEXT("RETREAT CANDIDATE REJECTED: Destination outside safe arena boundary | Destination=%s"),
+                    *ProjectedLocation.Location.ToString()
+                );
+
+                continue;
+            }
+
             // Only accept destinations that do not bring the bot closer
             // to its current combat target.
             if (IsValidCombatTarget(Target))
@@ -1255,8 +1272,12 @@ void ABotAIController::RetreatFromCombat()
                 }
             }
 
+            bIssuingRetreatMove = true;
+
             const EPathFollowingRequestResult::Type MoveResult =
                 MoveToLocation(ProjectedLocation.Location, 100.0f);
+
+            bIssuingRetreatMove = false;
 
             UE_LOG(
                 LogTemp,
@@ -1269,7 +1290,7 @@ void ABotAIController::RetreatFromCombat()
                 *ProjectedLocation.Location.ToString()
             );
 
-            if (MoveResult != EPathFollowingRequestResult::Failed)
+            if (MoveResult == EPathFollowingRequestResult::RequestSuccessful)
             {
                 UE_LOG(
                     LogTemp,
@@ -1348,6 +1369,12 @@ void ABotAIController::StopRetreating()
 
 void ABotAIController::PursueCurrentTarget()
 {
+    // Do not pursue a target while retreating.
+    if (bIsRetreating)
+    {
+        return;
+    }
+
     AActor* Target = CurrentTarget.Get();
 
     if (!IsValidCombatTarget(Target))
