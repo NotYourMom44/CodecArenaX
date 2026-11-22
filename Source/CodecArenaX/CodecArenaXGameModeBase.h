@@ -6,6 +6,7 @@
 #include "CodecArenaXGameModeBase.generated.h"
 
 class ABotCharacter;
+class ABaseCharacter;
 class AController;
 
 UCLASS()
@@ -14,6 +15,8 @@ class CODECARENAX_API ACodecArenaXGameModeBase : public AGameModeBase
     GENERATED_BODY()
 
 public:
+    ACodecArenaXGameModeBase();
+
     UFUNCTION(BlueprintCallable, Category = "Respawning")
     AActor* ChooseRandomSpawnPoint() const;
 
@@ -24,10 +27,19 @@ public:
     void HandlePlayerDeath(AController* DeadController);
 
 protected:
+    virtual void BeginPlay() override;
+
     UPROPERTY(EditDefaultsOnly, Category = "Respawning")
     float BotRespawnDelay = 5.0f;
 
 private:
+    void RegisterInitialParticipants();
+
+    void AwardKillForDeath(
+        ABaseCharacter* Victim,
+        AController* VictimController
+    );
+
     void RespawnBot(
         TSubclassOf<ABotCharacter> BotClass,
         FName ParticipantId

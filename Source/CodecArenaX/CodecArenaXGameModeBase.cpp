@@ -1,12 +1,183 @@
 
 #include "CodecArenaXGameModeBase.h"
 
-#include "GameFramework/Controller.h"
+#include "CodecArenaXGameState.h"
+#include "BaseCharacter.h"
 #include "BotCharacter.h"
+#include "HealthComponent.h"
+
 #include "EngineUtils.h"
 #include "Engine/World.h"
+#include "GameFramework/Controller.h"
+#include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerStart.h"
 #include "TimerManager.h"
+
+ACodecArenaXGameModeBase::ACodecArenaXGameModeBase()
+{
+    GameStateClass = ACodecArenaXGameState::StaticClass();
+}
+
+void ACodecArenaXGameModeBase::BeginPlay()
+{
+    Super::BeginPlay();
+
+    GetWorld()->GetTimerManager().SetTimerForNextTick(
+        this,
+        &ACodecArenaXGameModeBase::RegisterInitialParticipants
+    );
+}
+
+void ACodecArenaXGameModeBase::RegisterInitialParticipants()
+{
+    ACodecArenaXGameState* ScoringGameState =
+        GetGameState<ACodecArenaXGameState>();
+
+    if (!ScoringGameState)
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Scoring: Custom GameState could not be found.")
+        );
+        return;
+    }
+
+    ScoringGameState->RegisterParticipant(
+        FName("Player"),
+        TEXT("Player"),
+        true
+    );
+
+    int32 RegisteredBotCount = 0;
+
+    for (TActorIterator<ABotCharacter> It(GetWorld()); It; ++It)
+    {
+        ABotCharacter* Bot = *It;
+
+        if (!IsValid(Bot))
+        {
+            continue;
+        }
+
+        FName ParticipantId = Bot->GetParticipantId();
+
+        if (ParticipantId.IsNone())
+        {
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("Scoring: Bot %s has no participant ID yet."),
+                *GetNameSafe(Bot)
+            );
+            continue;
+        }
+
+        ScoringGameState->RegisterParticipant(
+            ParticipantId,
+            ParticipantId.ToString(),
+            false
+        );
+
+        RegisteredBotCount++;
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Scoring: Initial registration complete. Registered %d bots."),
+        RegisteredBotCount
+    );
+}
+
+void ACodecArenaXGameModeBase::AwardKillForDeath(
+    ABaseCharacter* Victim,
+    AController* VictimController)
+{
+    if (!IsValid(Victim))
+    {
+        return;
+    }
+
+    UHealthComponent* VictimHealth = Victim->GetHealthComponent();
+
+    if (!VictimHealth)
+    {
+        return;
+    }
+
+    AController* KillerController =
+        VictimHealth->GetLastDamageInstigator();
+
+    if (!IsValid(KillerController))
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("Scoring: No valid killer found for %s. No kill awarded."),
+            *GetNameSafe(Victim)
+        );
+        return;
+    }
+
+    // Do not award a kill for self-inflicted damage.
+    if (KillerController == VictimController)
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("Scoring: Self-inflicted death for %s. No kill awarded."),
+            *GetNameSafe(Victim)
+        );
+        return;
+    }
+
+    FName KillerParticipantId = NAME_None;
+
+    // Identify the human player.
+    if (Cast<APlayerController>(KillerController))
+    {
+        KillerParticipantId = FName("Player");
+    }
+    else
+    {
+        // Otherwise, check whether the killer is one of the bots.
+        APawn* KillerPawn = KillerController->GetPawn();
+
+        ABotCharacter* KillerBot = Cast<ABotCharacter>(KillerPawn);
+
+        if (KillerBot)
+        {
+            KillerParticipantId = KillerBot->GetParticipantId();
+        }
+    }
+
+    if (KillerParticipantId.IsNone())
+    {
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("Scoring: Could not identify killer for %s. No kill awarded."),
+            *GetNameSafe(Victim)
+        );
+        return;
+    }
+
+    ACodecArenaXGameState* ScoringGameState =
+        GetGameState<ACodecArenaXGameState>();
+
+    if (!ScoringGameState)
+    {
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Scoring: Cannot award kill because GameState is unavailable.")
+        );
+        return;
+    }
+
+    ScoringGameState->AddKill(KillerParticipantId);
+}
 
 AActor* ACodecArenaXGameModeBase::ChooseRandomSpawnPoint() const
 {
@@ -35,9 +206,11 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
         return;
     }
 
+    // Award the kill before destroying the victim.
+    AwardKillForDeath(DeadBot, DeadBot->GetController());
+
     TSubclassOf<ABotCharacter> BotClass = DeadBot->GetClass();
 
-    // Capture the participant ID before destroying the bot.
     FName ParticipantId = DeadBot->GetParticipantId();
 
     if (ParticipantId.IsNone())
@@ -76,8 +249,7 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
 
 void ACodecArenaXGameModeBase::RespawnBot(
     TSubclassOf<ABotCharacter> BotClass,
-    FName ParticipantId
-)
+    FName ParticipantId)
 {
     if (!BotClass)
     {
@@ -95,8 +267,6 @@ void ACodecArenaXGameModeBase::RespawnBot(
 
     const FTransform SpawnTransform = SpawnPoint->GetActorTransform();
 
-    // Spawn the bot in a deferred state so its original identity
-    // can be assigned before BeginPlay runs.
     ABotCharacter* NewBot = GetWorld()->SpawnActorDeferred<ABotCharacter>(
         BotClass,
         SpawnTransform,
@@ -137,6 +307,14 @@ void ACodecArenaXGameModeBase::HandlePlayerDeath(
 
     if (IsValid(DeadPawn))
     {
+        // Award the kill before destroying the player pawn.
+        ABaseCharacter* DeadCharacter = Cast<ABaseCharacter>(DeadPawn);
+
+        if (DeadCharacter)
+        {
+            AwardKillForDeath(DeadCharacter, DeadController);
+        }
+
         DeadPawn->Destroy();
     }
 
