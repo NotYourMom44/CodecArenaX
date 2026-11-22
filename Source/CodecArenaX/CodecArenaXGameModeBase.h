@@ -1,8 +1,8 @@
-
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
+#include "TimerManager.h"
 #include "CodecArenaXGameModeBase.generated.h"
 
 class ABotCharacter;
@@ -26,11 +26,20 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Respawning")
     void HandlePlayerDeath(AController* DeadController);
 
+    UFUNCTION(BlueprintCallable, Category = "Match")
+    void StartMatch();
+
+    UFUNCTION(BlueprintCallable, Category = "Match")
+    void EndMatch();
+
 protected:
     virtual void BeginPlay() override;
 
     UPROPERTY(EditDefaultsOnly, Category = "Respawning")
     float BotRespawnDelay = 5.0f;
+
+    UPROPERTY(EditDefaultsOnly, Category = "Match")
+    int32 MatchDurationSeconds = 300;
 
 private:
     void RegisterInitialParticipants();
@@ -46,4 +55,14 @@ private:
     );
 
     void RespawnPlayer(AController* Controller);
+
+    void UpdateMatchTimer();
+
+    FTimerHandle MatchTimerHandle;
+
+    int32 RemainingMatchSeconds = 300;
+
+    bool bMatchInProgress = false;
+
+    bool bMatchEnded = false;
 };

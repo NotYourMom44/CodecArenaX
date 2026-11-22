@@ -1,9 +1,6 @@
-
 #include "CodecArenaXGameState.h"
 
-int32 ACodecArenaXGameState::FindParticipantIndex(
-    FName ParticipantId
-) const
+int32 ACodecArenaXGameState::FindParticipantIndex(FName ParticipantId) const
 {
     for (int32 Index = 0; Index < ParticipantScores.Num(); Index++)
     {
@@ -24,6 +21,7 @@ void ACodecArenaXGameState::RegisterParticipant(
 {
     if (ParticipantId.IsNone())
     {
+        UE_LOG(LogTemp, Warning, TEXT("Scoring: Cannot register participant with an empty ID."));
         return;
     }
 
@@ -31,6 +29,7 @@ void ACodecArenaXGameState::RegisterParticipant(
 
     if (ExistingIndex != INDEX_NONE)
     {
+        UE_LOG(LogTemp, Warning, TEXT("Scoring: Participant %s is already registered."), *ParticipantId.ToString());
         return;
     }
 
@@ -42,48 +41,33 @@ void ACodecArenaXGameState::RegisterParticipant(
 
     ParticipantScores.Add(NewParticipant);
 
-    UE_LOG(
-        LogTemp,
-        Warning,
-        TEXT("Scoring: Registered participant %s (%s)."),
-        *DisplayName,
-        *ParticipantId.ToString()
-    );
+    UE_LOG(LogTemp, Warning, TEXT("Scoring: Registered participant %s (%s)."),
+        *ParticipantId.ToString(), *DisplayName);
 
     OnScoresUpdated.Broadcast();
 }
 
 void ACodecArenaXGameState::AddKill(FName ParticipantId)
 {
-    const int32 ParticipantIndex = FindParticipantIndex(ParticipantId);
+    const int32 Index = FindParticipantIndex(ParticipantId);
 
-    if (ParticipantIndex == INDEX_NONE)
+    if (Index == INDEX_NONE)
     {
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT("Scoring: Cannot award kill. Participant %s is not registered."),
-            *ParticipantId.ToString()
-        );
-
+        UE_LOG(LogTemp, Warning, TEXT("Scoring: Cannot award kill. Participant %s was not registered."),
+            *ParticipantId.ToString());
         return;
     }
 
-    ParticipantScores[ParticipantIndex].Kills++;
+    ParticipantScores[Index].Kills++;
 
-    UE_LOG(
-        LogTemp,
-        Warning,
-        TEXT("Scoring: %s now has %d kills."),
-        *ParticipantScores[ParticipantIndex].DisplayName,
-        ParticipantScores[ParticipantIndex].Kills
-    );
+    UE_LOG(LogTemp, Warning, TEXT("Scoring: %s now has %d kills."),
+        *ParticipantScores[Index].DisplayName,
+        ParticipantScores[Index].Kills);
 
     OnScoresUpdated.Broadcast();
 }
 
-TArray<FParticipantScore>
-ACodecArenaXGameState::GetParticipantScores() const
+TArray<FParticipantScore> ACodecArenaXGameState::GetParticipantScores() const
 {
     return ParticipantScores;
 }
@@ -95,7 +79,41 @@ void ACodecArenaXGameState::ResetScores()
         Participant.Kills = 0;
     }
 
-    UE_LOG(LogTemp, Warning, TEXT("Scoring: All participant scores reset."));
-
     OnScoresUpdated.Broadcast();
+
+    UE_LOG(LogTemp, Warning, TEXT("Scoring: All participant scores have been reset."));
+}
+
+void ACodecArenaXGameState::SetRemainingMatchTime(int32 NewRemainingSeconds)
+{
+    const int32 ClampedTime = FMath::Max(0, NewRemainingSeconds);
+
+    if (RemainingMatchTime == ClampedTime)
+    {
+        return;
+    }
+
+    RemainingMatchTime = ClampedTime;
+    OnMatchTimeUpdated.Broadcast(RemainingMatchTime);
+}
+
+int32 ACodecArenaXGameState::GetRemainingMatchTime() const
+{
+    return RemainingMatchTime;
+}
+
+void ACodecArenaXGameState::SetMatchState(ECodecArenaMatchState NewMatchState)
+{
+    if (MatchState == NewMatchState)
+    {
+        return;
+    }
+
+    MatchState = NewMatchState;
+    OnMatchStateChanged.Broadcast(MatchState);
+}
+
+ECodecArenaMatchState ACodecArenaXGameState::GetMatchState() const
+{
+    return MatchState;
 }

@@ -35,11 +35,7 @@ void ACodecArenaXGameModeBase::RegisterInitialParticipants()
 
     if (!ScoringGameState)
     {
-        UE_LOG(
-            LogTemp,
-            Error,
-            TEXT("Scoring: Custom GameState could not be found.")
-        );
+        UE_LOG(LogTemp, Error, TEXT("Scoring: Custom GameState could not be found."));
         return;
     }
 
@@ -70,6 +66,7 @@ void ACodecArenaXGameModeBase::RegisterInitialParticipants()
                 TEXT("Scoring: Bot %s has no participant ID yet."),
                 *GetNameSafe(Bot)
             );
+
             continue;
         }
 
@@ -88,13 +85,109 @@ void ACodecArenaXGameModeBase::RegisterInitialParticipants()
         TEXT("Scoring: Initial registration complete. Registered %d bots."),
         RegisteredBotCount
     );
+
+    // Start the match after all initial participants are registered.
+    StartMatch();
+}
+
+void ACodecArenaXGameModeBase::StartMatch()
+{
+    if (bMatchInProgress)
+    {
+        return;
+    }
+
+    ACodecArenaXGameState* MatchGameState =
+        GetGameState<ACodecArenaXGameState>();
+
+    if (!MatchGameState)
+    {
+        UE_LOG(LogTemp, Error, TEXT("Match: Cannot start because GameState is unavailable."));
+        return;
+    }
+
+    bMatchEnded = false;
+    bMatchInProgress = true;
+
+    RemainingMatchSeconds = FMath::Max(1, MatchDurationSeconds);
+
+    MatchGameState->ResetScores();
+    MatchGameState->SetRemainingMatchTime(RemainingMatchSeconds);
+    MatchGameState->SetMatchState(ECodecArenaMatchState::InProgress);
+
+    GetWorld()->GetTimerManager().ClearTimer(MatchTimerHandle);
+
+    GetWorld()->GetTimerManager().SetTimer(
+        MatchTimerHandle,
+        this,
+        &ACodecArenaXGameModeBase::UpdateMatchTimer,
+        1.0f,
+        true
+    );
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Match: Started. Duration: %d seconds."),
+        RemainingMatchSeconds
+    );
+}
+
+void ACodecArenaXGameModeBase::UpdateMatchTimer()
+{
+    if (!bMatchInProgress)
+    {
+        return;
+    }
+
+    RemainingMatchSeconds--;
+
+   
+
+    ACodecArenaXGameState* MatchGameState =
+        GetGameState<ACodecArenaXGameState>();
+
+    if (MatchGameState)
+    {
+        MatchGameState->SetRemainingMatchTime(RemainingMatchSeconds);
+    }
+
+    if (RemainingMatchSeconds <= 0)
+    {
+        EndMatch();
+    }
+}
+
+void ACodecArenaXGameModeBase::EndMatch()
+{
+    if (bMatchEnded)
+    {
+        return;
+    }
+
+    bMatchInProgress = false;
+    bMatchEnded = true;
+
+    GetWorld()->GetTimerManager().ClearTimer(MatchTimerHandle);
+
+    ACodecArenaXGameState* MatchGameState =
+        GetGameState<ACodecArenaXGameState>();
+
+    if (MatchGameState)
+    {
+        MatchGameState->SetRemainingMatchTime(0);
+        MatchGameState->SetMatchState(ECodecArenaMatchState::MatchOver);
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("Match: Time expired. Match over."));
 }
 
 void ACodecArenaXGameModeBase::AwardKillForDeath(
     ABaseCharacter* Victim,
-    AController* VictimController)
+    AController* VictimController
+)
 {
-    if (!IsValid(Victim))
+    if (!bMatchInProgress || !IsValid(Victim))
     {
         return;
     }
@@ -117,10 +210,10 @@ void ACodecArenaXGameModeBase::AwardKillForDeath(
             TEXT("Scoring: No valid killer found for %s. No kill awarded."),
             *GetNameSafe(Victim)
         );
+
         return;
     }
 
-    // Do not award a kill for self-inflicted damage.
     if (KillerController == VictimController)
     {
         UE_LOG(
@@ -129,19 +222,18 @@ void ACodecArenaXGameModeBase::AwardKillForDeath(
             TEXT("Scoring: Self-inflicted death for %s. No kill awarded."),
             *GetNameSafe(Victim)
         );
+
         return;
     }
 
     FName KillerParticipantId = NAME_None;
 
-    // Identify the human player.
     if (Cast<APlayerController>(KillerController))
     {
         KillerParticipantId = FName("Player");
     }
     else
     {
-        // Otherwise, check whether the killer is one of the bots.
         APawn* KillerPawn = KillerController->GetPawn();
 
         ABotCharacter* KillerBot = Cast<ABotCharacter>(KillerPawn);
@@ -160,6 +252,7 @@ void ACodecArenaXGameModeBase::AwardKillForDeath(
             TEXT("Scoring: Could not identify killer for %s. No kill awarded."),
             *GetNameSafe(Victim)
         );
+
         return;
     }
 
@@ -173,6 +266,7 @@ void ACodecArenaXGameModeBase::AwardKillForDeath(
             Error,
             TEXT("Scoring: Cannot award kill because GameState is unavailable.")
         );
+
         return;
     }
 
@@ -190,12 +284,18 @@ AActor* ACodecArenaXGameModeBase::ChooseRandomSpawnPoint() const
 
     if (SpawnPoints.IsEmpty())
     {
-        UE_LOG(LogTemp, Warning,
-            TEXT("Respawning: No PlayerStart actors found."));
+        UE_LOG(
+            LogTemp,
+            Warning,
+            TEXT("Respawning: No PlayerStart actors found.")
+        );
+
         return nullptr;
     }
 
-    const int32 RandomIndex = FMath::RandRange(0, SpawnPoints.Num() - 1);
+    const int32 RandomIndex =
+        FMath::RandRange(0, SpawnPoints.Num() - 1);
+
     return SpawnPoints[RandomIndex];
 }
 
@@ -206,7 +306,6 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
         return;
     }
 
-    // Award the kill before destroying the victim.
     AwardKillForDeath(DeadBot, DeadBot->GetController());
 
     TSubclassOf<ABotCharacter> BotClass = DeadBot->GetClass();
@@ -218,6 +317,13 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
         ParticipantId = DeadBot->GetFName();
     }
 
+    DeadBot->Destroy();
+
+    if (!bMatchInProgress)
+    {
+        return;
+    }
+
     UE_LOG(
         LogTemp,
         Warning,
@@ -226,8 +332,6 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
         *ParticipantId.ToString(),
         BotRespawnDelay
     );
-
-    DeadBot->Destroy();
 
     FTimerHandle RespawnTimer;
     FTimerDelegate RespawnDelegate;
@@ -249,9 +353,10 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
 
 void ACodecArenaXGameModeBase::RespawnBot(
     TSubclassOf<ABotCharacter> BotClass,
-    FName ParticipantId)
+    FName ParticipantId
+)
 {
-    if (!BotClass)
+    if (!bMatchInProgress || !BotClass)
     {
         return;
     }
@@ -260,8 +365,12 @@ void ACodecArenaXGameModeBase::RespawnBot(
 
     if (!SpawnPoint)
     {
-        UE_LOG(LogTemp, Error,
-            TEXT("Respawning: Cannot respawn bot because no PlayerStart exists."));
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Respawning: Cannot respawn bot because no PlayerStart exists.")
+        );
+
         return;
     }
 
@@ -277,13 +386,16 @@ void ACodecArenaXGameModeBase::RespawnBot(
 
     if (!NewBot)
     {
-        UE_LOG(LogTemp, Error,
-            TEXT("Respawning: Failed to create replacement bot."));
+        UE_LOG(
+            LogTemp,
+            Error,
+            TEXT("Respawning: Failed to create replacement bot.")
+        );
+
         return;
     }
 
     NewBot->SetParticipantId(ParticipantId);
-
     NewBot->FinishSpawning(SpawnTransform);
 
     UE_LOG(
@@ -295,8 +407,7 @@ void ACodecArenaXGameModeBase::RespawnBot(
     );
 }
 
-void ACodecArenaXGameModeBase::HandlePlayerDeath(
-    AController* DeadController)
+void ACodecArenaXGameModeBase::HandlePlayerDeath(AController* DeadController)
 {
     if (!IsValid(DeadController))
     {
@@ -307,7 +418,6 @@ void ACodecArenaXGameModeBase::HandlePlayerDeath(
 
     if (IsValid(DeadPawn))
     {
-        // Award the kill before destroying the player pawn.
         ABaseCharacter* DeadCharacter = Cast<ABaseCharacter>(DeadPawn);
 
         if (DeadCharacter)
@@ -316,6 +426,11 @@ void ACodecArenaXGameModeBase::HandlePlayerDeath(
         }
 
         DeadPawn->Destroy();
+    }
+
+    if (!bMatchInProgress)
+    {
+        return;
     }
 
     FTimerHandle RespawnTimer;
@@ -335,10 +450,9 @@ void ACodecArenaXGameModeBase::HandlePlayerDeath(
     );
 }
 
-void ACodecArenaXGameModeBase::RespawnPlayer(
-    AController* Controller)
+void ACodecArenaXGameModeBase::RespawnPlayer(AController* Controller)
 {
-    if (!IsValid(Controller))
+    if (!bMatchInProgress || !IsValid(Controller))
     {
         return;
     }
