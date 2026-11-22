@@ -5,6 +5,8 @@
 #include "Components/ActorComponent.h"
 #include "HealthComponent.generated.h"
 
+class AController;
+
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
     FOnHealthChanged,
     float, CurrentHealth,
@@ -22,7 +24,7 @@ public:
     UHealthComponent();
 
     UFUNCTION(BlueprintCallable, Category = "Health")
-    void TakeDamage(float DamageAmount);
+    void TakeDamage(float DamageAmount, AController* DamageInstigator);
 
     UFUNCTION(BlueprintCallable, Category = "Health")
     void Heal(float HealAmount);
@@ -39,6 +41,9 @@ public:
     UFUNCTION(BlueprintPure, Category = "Health")
     bool IsAlive() const;
 
+    UFUNCTION(BlueprintPure, Category = "Health")
+    AController* GetLastDamageInstigator() const;
+
     UPROPERTY(BlueprintAssignable, Category = "Health")
     FOnHealthChanged OnHealthChanged;
 
@@ -52,6 +57,8 @@ protected:
 private:
     UPROPERTY(VisibleInstanceOnly, Category = "Health")
     float CurrentHealth;
+
+    TWeakObjectPtr<AController> LastDamageInstigator;
 
     bool bDeathEventSent;
 };

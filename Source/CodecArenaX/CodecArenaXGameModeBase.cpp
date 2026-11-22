@@ -37,18 +37,33 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
 
     TSubclassOf<ABotCharacter> BotClass = DeadBot->GetClass();
 
-    UE_LOG(LogTemp, Warning,
-        TEXT("Respawning: %s will respawn in %.1f seconds."),
-        *GetNameSafe(DeadBot), BotRespawnDelay);
+    // Capture the participant ID before destroying the bot.
+    FName ParticipantId = DeadBot->GetParticipantId();
+
+    if (ParticipantId.IsNone())
+    {
+        ParticipantId = DeadBot->GetFName();
+    }
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Respawning: Bot %s (Participant ID: %s) will respawn in %.1f seconds."),
+        *GetNameSafe(DeadBot),
+        *ParticipantId.ToString(),
+        BotRespawnDelay
+    );
 
     DeadBot->Destroy();
 
     FTimerHandle RespawnTimer;
     FTimerDelegate RespawnDelegate;
+
     RespawnDelegate.BindUObject(
         this,
         &ACodecArenaXGameModeBase::RespawnBot,
-        BotClass
+        BotClass,
+        ParticipantId
     );
 
     GetWorld()->GetTimerManager().SetTimer(
@@ -60,7 +75,9 @@ void ACodecArenaXGameModeBase::HandleBotDeath(ABotCharacter* DeadBot)
 }
 
 void ACodecArenaXGameModeBase::RespawnBot(
-    TSubclassOf<ABotCharacter> BotClass)
+    TSubclassOf<ABotCharacter> BotClass,
+    FName ParticipantId
+)
 {
     if (!BotClass)
     {
@@ -76,22 +93,36 @@ void ACodecArenaXGameModeBase::RespawnBot(
         return;
     }
 
-    FActorSpawnParameters SpawnParameters;
-    SpawnParameters.SpawnCollisionHandlingOverride =
-        ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+    const FTransform SpawnTransform = SpawnPoint->GetActorTransform();
 
-    ABotCharacter* NewBot = GetWorld()->SpawnActor<ABotCharacter>(
+    // Spawn the bot in a deferred state so its original identity
+    // can be assigned before BeginPlay runs.
+    ABotCharacter* NewBot = GetWorld()->SpawnActorDeferred<ABotCharacter>(
         BotClass,
-        SpawnPoint->GetActorTransform(),
-        SpawnParameters
+        SpawnTransform,
+        nullptr,
+        nullptr,
+        ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn
     );
 
-    if (NewBot)
+    if (!NewBot)
     {
-        UE_LOG(LogTemp, Warning,
-            TEXT("Respawning: Spawned replacement bot %s."),
-            *GetNameSafe(NewBot));
+        UE_LOG(LogTemp, Error,
+            TEXT("Respawning: Failed to create replacement bot."));
+        return;
     }
+
+    NewBot->SetParticipantId(ParticipantId);
+
+    NewBot->FinishSpawning(SpawnTransform);
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Respawning: Spawned replacement bot %s with Participant ID %s."),
+        *GetNameSafe(NewBot),
+        *NewBot->GetParticipantId().ToString()
+    );
 }
 
 void ACodecArenaXGameModeBase::HandlePlayerDeath(

@@ -10,21 +10,29 @@ class UWeaponInventoryComponent;
 UCLASS()
 class CODECARENAX_API ABotCharacter : public ABaseCharacter
 {
-	GENERATED_BODY()
+    GENERATED_BODY()
 
 public:
-	ABotCharacter();
+    ABotCharacter();
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	TObjectPtr<UWeaponInventoryComponent> WeaponInventory;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UWeaponInventoryComponent> WeaponInventory;
+
+    UFUNCTION(BlueprintPure, Category = "Scoring")
+    FName GetParticipantId() const;
+
+    void SetParticipantId(FName NewParticipantId);
 
 protected:
-	virtual void BeginPlay() override;
+    virtual void BeginPlay() override;
+
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Scoring")
+    FName ParticipantId = NAME_None;
 
 public:
-	virtual void Tick(float DeltaTime) override;
+    virtual void Tick(float DeltaTime) override;
 
-	virtual void SetupPlayerInputComponent(
-		class UInputComponent* PlayerInputComponent
-	) override;
+    virtual void SetupPlayerInputComponent(
+        class UInputComponent* PlayerInputComponent
+    ) override;
 };

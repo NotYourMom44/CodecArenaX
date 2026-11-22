@@ -4,6 +4,8 @@
 #include "UObject/Interface.h"
 #include "Damageable.generated.h"
 
+class AController;
+
 UINTERFACE(BlueprintType)
 class CODECARENAX_API UDamageable : public UInterface
 {
@@ -15,5 +17,5 @@ class CODECARENAX_API IDamageable
     GENERATED_BODY()
 
 public:
-    virtual void ReceiveDamage(float DamageAmount) = 0;
+    virtual void ReceiveDamage(float DamageAmount, AController* DamageInstigator) = 0;
 };

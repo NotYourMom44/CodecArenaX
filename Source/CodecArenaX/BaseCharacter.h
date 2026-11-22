@@ -16,7 +16,7 @@ class CODECARENAX_API ABaseCharacter : public ACharacter, public IDamageable
 public:
     ABaseCharacter();
 
-    virtual void ReceiveDamage(float DamageAmount) override;
+    virtual void ReceiveDamage(float DamageAmount, AController* DamageInstigator) override;
 
     UFUNCTION(Exec)
     void DebugDamage(float Amount);

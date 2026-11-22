@@ -4,6 +4,8 @@
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "GameFramework/Pawn.h"
+#include "GameFramework/Controller.h"
 #include "Damageable.h"
 #include "Engine/StaticMesh.h"
 #include "UObject/ConstructorHelpers.h"
@@ -123,15 +125,23 @@ void AWeaponProjectile::OnProjectileHit(
 
     if (IDamageable* Damageable = Cast<IDamageable>(OtherActor))
     {
+        AController* DamageInstigator = nullptr;
+
+        if (APawn* InstigatingPawn = GetInstigator())
+        {
+            DamageInstigator = InstigatingPawn->GetController();
+        }
+
         UE_LOG(
             LogTemp,
             Warning,
-            TEXT("Projectile applying %.1f damage to %s"),
+            TEXT("Projectile applying %.1f damage to %s. Instigator: %s"),
             Damage,
-            *GetNameSafe(OtherActor)
+            *GetNameSafe(OtherActor),
+            *GetNameSafe(DamageInstigator)
         );
 
-        Damageable->ReceiveDamage(Damage);
+        Damageable->ReceiveDamage(Damage, DamageInstigator);
     }
     else
     {

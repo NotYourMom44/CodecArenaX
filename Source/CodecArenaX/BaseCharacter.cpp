@@ -1,5 +1,4 @@
 
-
 #include "BaseCharacter.h"
 
 ABaseCharacter::ABaseCharacter()
@@ -11,17 +10,20 @@ ABaseCharacter::ABaseCharacter()
     );
 }
 
-void ABaseCharacter::ReceiveDamage(float DamageAmount)
+void ABaseCharacter::ReceiveDamage(
+    float DamageAmount,
+    AController* DamageInstigator
+)
 {
     if (HealthComponent)
     {
-        HealthComponent->TakeDamage(DamageAmount);
+        HealthComponent->TakeDamage(DamageAmount, DamageInstigator);
     }
 }
 
 void ABaseCharacter::DebugDamage(float Amount)
 {
-    ReceiveDamage(Amount);
+    ReceiveDamage(Amount, nullptr);
 
     UE_LOG(
         LogTemp,

@@ -1,6 +1,8 @@
 
 #include "HealthComponent.h"
 
+#include "GameFramework/Controller.h"
+
 UHealthComponent::UHealthComponent()
 {
     PrimaryComponentTick.bCanEverTick = false;
@@ -10,12 +12,14 @@ UHealthComponent::UHealthComponent()
     bDeathEventSent = false;
 }
 
-void UHealthComponent::TakeDamage(float DamageAmount)
+void UHealthComponent::TakeDamage(float DamageAmount, AController* DamageInstigator)
 {
     if (DamageAmount <= 0.0f || !IsAlive())
     {
         return;
     }
+
+    LastDamageInstigator = DamageInstigator;
 
     CurrentHealth = FMath::Clamp(
         CurrentHealth - DamageAmount,
@@ -61,6 +65,7 @@ void UHealthComponent::Heal(float HealAmount)
 void UHealthComponent::ResetHealth()
 {
     CurrentHealth = MaxHealth;
+    LastDamageInstigator = nullptr;
     bDeathEventSent = false;
 
     OnHealthChanged.Broadcast(CurrentHealth, MaxHealth);
@@ -79,4 +84,9 @@ float UHealthComponent::GetMaxHealth() const
 bool UHealthComponent::IsAlive() const
 {
     return CurrentHealth > 0.0f;
+}
+
+AController* UHealthComponent::GetLastDamageInstigator() const
+{
+    return LastDamageInstigator.Get();
 }

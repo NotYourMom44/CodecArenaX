@@ -28,6 +28,10 @@ protected:
     float BotRespawnDelay = 5.0f;
 
 private:
-    void RespawnBot(TSubclassOf<ABotCharacter> BotClass);
+    void RespawnBot(
+        TSubclassOf<ABotCharacter> BotClass,
+        FName ParticipantId
+    );
+
     void RespawnPlayer(AController* Controller);
 };
