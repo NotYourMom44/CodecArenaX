@@ -1,3 +1,4 @@
+
 #include "CodecArenaXGameState.h"
 
 int32 ACodecArenaXGameState::FindParticipantIndex(FName ParticipantId) const
@@ -69,7 +70,21 @@ void ACodecArenaXGameState::AddKill(FName ParticipantId)
 
 TArray<FParticipantScore> ACodecArenaXGameState::GetParticipantScores() const
 {
-    return ParticipantScores;
+    // Return a copy so sorting does not change the stored participant data.
+    TArray<FParticipantScore> SortedScores = ParticipantScores;
+
+    // Highest kill count first. Display name breaks ties consistently.
+    SortedScores.Sort([](const FParticipantScore& A, const FParticipantScore& B)
+        {
+            if (A.Kills != B.Kills)
+            {
+                return A.Kills > B.Kills;
+            }
+
+            return A.DisplayName < B.DisplayName;
+        });
+
+    return SortedScores;
 }
 
 void ACodecArenaXGameState::ResetScores()
