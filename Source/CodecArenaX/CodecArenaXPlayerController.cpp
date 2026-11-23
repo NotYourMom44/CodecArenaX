@@ -1,9 +1,9 @@
-
 #include "CodecArenaXPlayerController.h"
 
 #include "EnhancedInputComponent.h"
 #include "InputAction.h"
 #include "Blueprint/UserWidget.h"
+#include "Kismet/GameplayStatics.h"
 
 void ACodecArenaXPlayerController::BeginPlay()
 {
@@ -13,6 +13,11 @@ void ACodecArenaXPlayerController::BeginPlay()
     {
         return;
     }
+
+    bShowMouseCursor = false;
+
+    FInputModeGameOnly InputMode;
+    SetInputMode(InputMode);
 
     if (LeaderboardWidgetClass)
     {
@@ -29,11 +34,32 @@ void ACodecArenaXPlayerController::BeginPlay()
             );
         }
     }
+
+    if (PauseMenuWidgetClass)
+    {
+        PauseMenuWidget = CreateWidget<UUserWidget>(
+            this,
+            PauseMenuWidgetClass
+        );
+
+        if (PauseMenuWidget)
+        {
+            PauseMenuWidget->AddToViewport();
+            PauseMenuWidget->SetVisibility(
+                ESlateVisibility::Collapsed
+            );
+        }
+    }
 }
 
 void ACodecArenaXPlayerController::SetupInputComponent()
 {
     Super::SetupInputComponent();
+
+    if (!InputComponent)
+    {
+        return;
+    }
 
     UEnhancedInputComponent* EnhancedInputComponent =
         Cast<UEnhancedInputComponent>(InputComponent);
@@ -59,11 +85,21 @@ void ACodecArenaXPlayerController::SetupInputComponent()
             &ACodecArenaXPlayerController::HideLeaderboard
         );
     }
+
+    if (PauseAction)
+    {
+        EnhancedInputComponent->BindAction(
+            PauseAction,
+            ETriggerEvent::Started,
+            this,
+            &ACodecArenaXPlayerController::TogglePause
+        );
+    }
 }
 
 void ACodecArenaXPlayerController::ShowLeaderboard()
 {
-    if (LeaderboardWidget)
+    if (LeaderboardWidget && !UGameplayStatics::IsGamePaused(GetWorld()))
     {
         LeaderboardWidget->SetVisibility(
             ESlateVisibility::Visible
@@ -77,6 +113,87 @@ void ACodecArenaXPlayerController::HideLeaderboard()
     {
         LeaderboardWidget->SetVisibility(
             ESlateVisibility::Collapsed
+        );
+    }
+}
+
+void ACodecArenaXPlayerController::TogglePause()
+{
+    if (!PauseMenuWidget)
+    {
+        return;
+    }
+
+    if (UGameplayStatics::IsGamePaused(GetWorld()))
+    {
+        SetPause(false);
+
+        PauseMenuWidget->SetVisibility(
+            ESlateVisibility::Collapsed
+        );
+
+        bShowMouseCursor = false;
+
+        FInputModeGameOnly InputMode;
+        SetInputMode(InputMode);
+    }
+    else
+    {
+        HideLeaderboard();
+
+        PauseMenuWidget->SetVisibility(
+            ESlateVisibility::Visible
+        );
+
+        SetPause(true);
+
+        bShowMouseCursor = true;
+
+        FInputModeGameAndUI InputMode;
+        InputMode.SetWidgetToFocus(PauseMenuWidget->TakeWidget());
+        InputMode.SetLockMouseToViewportBehavior(
+            EMouseLockMode::DoNotLock
+        );
+        InputMode.SetHideCursorDuringCapture(false);
+
+        SetInputMode(InputMode);
+    }
+}
+
+void ACodecArenaXPlayerController::ResumeGame()
+{
+    SetPause(false);
+
+    if (PauseMenuWidget)
+    {
+        PauseMenuWidget->SetVisibility(
+            ESlateVisibility::Collapsed
+        );
+    }
+
+    bShowMouseCursor = false;
+
+    FInputModeGameOnly InputMode;
+    SetInputMode(InputMode);
+}
+
+void ACodecArenaXPlayerController::RestartMatch()
+{
+    SetPause(false);
+
+    bShowMouseCursor = false;
+
+    FInputModeGameOnly InputMode;
+    SetInputMode(InputMode);
+
+    const FString CurrentLevelName =
+        UGameplayStatics::GetCurrentLevelName(this, true);
+
+    if (!CurrentLevelName.IsEmpty())
+    {
+        UGameplayStatics::OpenLevel(
+            this,
+            FName(*CurrentLevelName)
         );
     }
 }
