@@ -1,7 +1,9 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "CodecArenaXGameState.h"
 #include "CodecArenaXPlayerController.generated.h"
 
 class UInputAction;
@@ -36,13 +38,22 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "UI")
     TSubclassOf<UUserWidget> PauseMenuWidgetClass;
 
+    UPROPERTY(EditDefaultsOnly, Category = "UI")
+    TSubclassOf<UUserWidget> MatchOverWidgetClass;
+
     UPROPERTY()
     TObjectPtr<UUserWidget> LeaderboardWidget = nullptr;
 
     UPROPERTY()
     TObjectPtr<UUserWidget> PauseMenuWidget = nullptr;
 
+    UPROPERTY()
+    TObjectPtr<UUserWidget> MatchOverWidget = nullptr;
+
     void ShowLeaderboard();
     void HideLeaderboard();
     void TogglePause();
+
+    UFUNCTION()
+    void HandleMatchStateChanged(ECodecArenaMatchState NewMatchState);
 };

@@ -1,3 +1,4 @@
+
 #include "CodecArenaXPlayerController.h"
 
 #include "EnhancedInputComponent.h"
@@ -50,6 +51,41 @@ void ACodecArenaXPlayerController::BeginPlay()
             );
         }
     }
+
+    if (MatchOverWidgetClass)
+    {
+        MatchOverWidget = CreateWidget<UUserWidget>(
+            this,
+            MatchOverWidgetClass
+        );
+
+        if (MatchOverWidget)
+        {
+            MatchOverWidget->AddToViewport();
+            MatchOverWidget->SetVisibility(
+                ESlateVisibility::Collapsed
+            );
+        }
+    }
+
+    ACodecArenaXGameState* MatchGameState =
+        GetWorld()->GetGameState<ACodecArenaXGameState>();
+
+    if (MatchGameState)
+    {
+        MatchGameState->OnMatchStateChanged.AddDynamic(
+            this,
+            &ACodecArenaXPlayerController::HandleMatchStateChanged
+        );
+
+        if (MatchGameState->GetMatchState() ==
+            ECodecArenaMatchState::MatchOver)
+        {
+            HandleMatchStateChanged(
+                ECodecArenaMatchState::MatchOver
+            );
+        }
+    }
 }
 
 void ACodecArenaXPlayerController::SetupInputComponent()
@@ -99,7 +135,8 @@ void ACodecArenaXPlayerController::SetupInputComponent()
 
 void ACodecArenaXPlayerController::ShowLeaderboard()
 {
-    if (LeaderboardWidget && !UGameplayStatics::IsGamePaused(GetWorld()))
+    if (LeaderboardWidget &&
+        !UGameplayStatics::IsGamePaused(GetWorld()))
     {
         LeaderboardWidget->SetVisibility(
             ESlateVisibility::Visible
@@ -120,6 +157,16 @@ void ACodecArenaXPlayerController::HideLeaderboard()
 void ACodecArenaXPlayerController::TogglePause()
 {
     if (!PauseMenuWidget)
+    {
+        return;
+    }
+
+    ACodecArenaXGameState* MatchGameState =
+        GetWorld()->GetGameState<ACodecArenaXGameState>();
+
+    if (MatchGameState &&
+        MatchGameState->GetMatchState() ==
+        ECodecArenaMatchState::MatchOver)
     {
         return;
     }
@@ -160,6 +207,47 @@ void ACodecArenaXPlayerController::TogglePause()
     }
 }
 
+void ACodecArenaXPlayerController::HandleMatchStateChanged(
+    ECodecArenaMatchState NewMatchState
+)
+{
+    if (NewMatchState != ECodecArenaMatchState::MatchOver)
+    {
+        return;
+    }
+
+    HideLeaderboard();
+
+    if (PauseMenuWidget)
+    {
+        PauseMenuWidget->SetVisibility(
+            ESlateVisibility::Collapsed
+        );
+    }
+
+    if (!MatchOverWidget)
+    {
+        return;
+    }
+
+    MatchOverWidget->SetVisibility(
+        ESlateVisibility::Visible
+    );
+
+    SetPause(true);
+
+    bShowMouseCursor = true;
+
+    FInputModeGameAndUI InputMode;
+    InputMode.SetWidgetToFocus(MatchOverWidget->TakeWidget());
+    InputMode.SetLockMouseToViewportBehavior(
+        EMouseLockMode::DoNotLock
+    );
+    InputMode.SetHideCursorDuringCapture(false);
+
+    SetInputMode(InputMode);
+}
+
 void ACodecArenaXPlayerController::ResumeGame()
 {
     SetPause(false);
@@ -167,6 +255,13 @@ void ACodecArenaXPlayerController::ResumeGame()
     if (PauseMenuWidget)
     {
         PauseMenuWidget->SetVisibility(
+            ESlateVisibility::Collapsed
+        );
+    }
+
+    if (MatchOverWidget)
+    {
+        MatchOverWidget->SetVisibility(
             ESlateVisibility::Collapsed
         );
     }
