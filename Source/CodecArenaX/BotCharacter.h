@@ -6,6 +6,7 @@
 #include "BotCharacter.generated.h"
 
 class UWeaponInventoryComponent;
+class UWidgetComponent;
 
 UCLASS()
 class CODECARENAX_API ABotCharacter : public ABaseCharacter
@@ -17,6 +18,9 @@ public:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
     TObjectPtr<UWeaponInventoryComponent> WeaponInventory;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+    TObjectPtr<UWidgetComponent> HealthBarWidget;
 
     UFUNCTION(BlueprintPure, Category = "Scoring")
     FName GetParticipantId() const;
