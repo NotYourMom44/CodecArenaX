@@ -1,3 +1,4 @@
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -24,4 +25,15 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup")
     int32 AmmoAmount;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Pickup")
+    float RespawnDelay = 15.0f;
+
+    UFUNCTION()
+    void RespawnPickup();
+
+private:
+    FTimerHandle RespawnTimerHandle;
+
+    bool bIsAvailable = true;
 };

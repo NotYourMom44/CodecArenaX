@@ -1,9 +1,11 @@
+
 #include "WeaponAmmoPickup.h"
 
 #include "Components/StaticMeshComponent.h"
 #include "BaseCharacter.h"
 #include "WeaponInventoryComponent.h"
 #include "SecondaryWeapon.h"
+#include "TimerManager.h"
 
 AWeaponAmmoPickup::AWeaponAmmoPickup()
 {
@@ -27,7 +29,7 @@ AWeaponAmmoPickup::AWeaponAmmoPickup()
 
 void AWeaponAmmoPickup::Interact(ABaseCharacter* Character)
 {
-    if (!Character)
+    if (!Character || !bIsAvailable)
     {
         return;
     }
@@ -59,5 +61,26 @@ void AWeaponAmmoPickup::Interact(ABaseCharacter* Character)
         SecondaryWeapon->AddAmmo(AmmoAmount);
     }
 
-    Destroy();
+    // Temporarily disable the pickup.
+    bIsAvailable = false;
+
+    SetActorHiddenInGame(true);
+    SetActorEnableCollision(false);
+
+    // Respawn after the configured delay.
+    GetWorldTimerManager().SetTimer(
+        RespawnTimerHandle,
+        this,
+        &AWeaponAmmoPickup::RespawnPickup,
+        RespawnDelay,
+        false
+    );
+}
+
+void AWeaponAmmoPickup::RespawnPickup()
+{
+    bIsAvailable = true;
+
+    SetActorHiddenInGame(false);
+    SetActorEnableCollision(true);
 }
