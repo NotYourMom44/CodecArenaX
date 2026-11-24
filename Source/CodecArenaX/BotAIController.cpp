@@ -21,6 +21,203 @@
 #include "Perception/AISenseConfig_Sight.h"
 #include "Perception/AISense_Sight.h"
 
+
+// ------------------------------------------------------------
+// Bot AI State Pattern
+// ------------------------------------------------------------
+
+class ABotAIController::FBotAIState
+{
+public:
+    virtual ~FBotAIState() = default;
+
+    virtual void Enter(ABotAIController& Controller) {}
+    virtual void Exit(ABotAIController& Controller) {}
+
+    virtual void HandleTargetPerception(
+        ABotAIController& Controller,
+        AActor* Actor,
+        const FAIStimulus& Stimulus
+    )
+    {}
+};
+
+class ABotAIController::FPatrolState : public FBotAIState
+{
+public:
+    virtual void HandleTargetPerception(
+        ABotAIController& Controller,
+        AActor* Actor,
+        const FAIStimulus& Stimulus
+    ) override;
+};
+
+class ABotAIController::FCombatState : public FBotAIState
+{
+public:
+    virtual void Enter(ABotAIController& Controller) override;
+    virtual void HandleTargetPerception(
+        ABotAIController& Controller,
+        AActor* Actor,
+        const FAIStimulus& Stimulus
+    ) override;
+};
+
+class ABotAIController::FSeekingHealthState : public FBotAIState
+{
+public:
+    virtual void HandleTargetPerception(
+        ABotAIController& Controller,
+        AActor* Actor,
+        const FAIStimulus& Stimulus
+    ) override;
+};
+
+class ABotAIController::FSeekingAmmoState : public FBotAIState
+{
+public:
+    virtual void HandleTargetPerception(
+        ABotAIController& Controller,
+        AActor* Actor,
+        const FAIStimulus& Stimulus
+    ) override;
+};
+
+class ABotAIController::FRetreatingState : public FBotAIState
+{
+public:
+    virtual void HandleTargetPerception(
+        ABotAIController& Controller,
+        AActor* Actor,
+        const FAIStimulus& Stimulus
+    ) override;
+};
+
+// ------------------------------------------------------------
+// Bot AI State Implementations
+// ------------------------------------------------------------
+
+void ABotAIController::FPatrolState::HandleTargetPerception(
+    ABotAIController& Controller,
+    AActor* Actor,
+    const FAIStimulus& Stimulus
+)
+{
+    if (!Actor || !Controller.IsValidCombatTarget(Actor))
+    {
+        return;
+    }
+
+    if (Stimulus.WasSuccessfullySensed())
+    {
+        Controller.GetWorldTimerManager().ClearTimer(Controller.NavDiagnosticTimerHandle);
+
+        if (Controller.bSeekingHealthPickup)
+        {
+            Controller.bSeekingHealthPickup = false;
+            Controller.CurrentHealthPickup.Reset();
+        }
+
+        if (Controller.bSeekingAmmoPickup)
+        {
+            Controller.bSeekingAmmoPickup = false;
+            Controller.CurrentAmmoPickup.Reset();
+        }
+
+        Controller.StopMovement();
+        Controller.CurrentTarget = Actor;
+        Controller.TransitionToState(MakeShared<FCombatState>());
+    }
+}
+
+void ABotAIController::FCombatState::Enter(ABotAIController& Controller)
+{
+    Controller.PursueCurrentTarget();
+    Controller.StartFiringAtTarget();
+}
+
+void ABotAIController::FCombatState::HandleTargetPerception(
+    ABotAIController& Controller,
+    AActor* Actor,
+    const FAIStimulus& Stimulus
+)
+{
+    if (Actor != Controller.CurrentTarget.Get())
+    {
+        return;
+    }
+
+    if (!Stimulus.WasSuccessfullySensed())
+    {
+        Controller.StopFiringAtTarget();
+        Controller.CurrentTarget.Reset();
+        Controller.TransitionToState(MakeShared<FPatrolState>());
+        Controller.MoveToRandomPatrolPoint();
+    }
+}
+
+void ABotAIController::FSeekingHealthState::HandleTargetPerception(
+    ABotAIController& Controller,
+    AActor* Actor,
+    const FAIStimulus& Stimulus
+)
+{
+    if (!Actor || !Controller.IsValidCombatTarget(Actor))
+    {
+        return;
+    }
+
+    if (Stimulus.WasSuccessfullySensed())
+    {
+        Controller.bSeekingHealthPickup = false;
+        Controller.CurrentHealthPickup.Reset();
+        Controller.StopMovement();
+        Controller.CurrentTarget = Actor;
+        Controller.TransitionToState(MakeShared<FCombatState>());
+    }
+}
+
+void ABotAIController::FSeekingAmmoState::HandleTargetPerception(
+    ABotAIController& Controller,
+    AActor* Actor,
+    const FAIStimulus& Stimulus
+)
+{
+    if (!Actor || !Controller.IsValidCombatTarget(Actor))
+    {
+        return;
+    }
+
+    if (Stimulus.WasSuccessfullySensed())
+    {
+        Controller.bSeekingAmmoPickup = false;
+        Controller.CurrentAmmoPickup.Reset();
+        Controller.StopMovement();
+        Controller.CurrentTarget = Actor;
+        Controller.TransitionToState(MakeShared<FCombatState>());
+    }
+}
+
+void ABotAIController::FRetreatingState::HandleTargetPerception(
+    ABotAIController& Controller,
+    AActor* Actor,
+    const FAIStimulus& Stimulus
+)
+{
+    if (Actor != Controller.CurrentTarget.Get())
+    {
+        return;
+    }
+
+    if (!Stimulus.WasSuccessfullySensed())
+    {
+        Controller.StopFiringAtTarget();
+        Controller.CurrentTarget.Reset();
+
+        // Do not stop movement: the bot must finish retreating.
+    }
+}
+
 ABotAIController::ABotAIController()
 {
     AIPerception =
@@ -52,6 +249,22 @@ ABotAIController::ABotAIController()
     );
 }
 
+void ABotAIController::TransitionToState(TSharedPtr<FBotAIState> NewState)
+{
+    if (!NewState || CurrentState == NewState)
+    {
+        return;
+    }
+
+    if (CurrentState)
+    {
+        CurrentState->Exit(*this);
+    }
+
+    CurrentState = NewState;
+    CurrentState->Enter(*this);
+}
+
 void ABotAIController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
@@ -79,6 +292,7 @@ void ABotAIController::OnPossess(APawn* InPawn)
         );
     }
 
+    TransitionToState(MakeShared<FPatrolState>());
     MoveToRandomPatrolPoint();
 }
 
@@ -262,6 +476,7 @@ void ABotAIController::OnMoveCompleted(
         else
         {
             const UWorld* World = GetWorld();
+            APawn* ControlledPawn = GetPawn();
             AActor* RetreatLogTarget = CurrentTarget.Get();
 
             UE_LOG(
@@ -269,20 +484,21 @@ void ABotAIController::OnMoveCompleted(
                 Warning,
                 TEXT("RETREAT MOVE DID NOT SUCCEED: Time=%.3f | Pawn=%s | RequestID=%u | Result=%s | Code=%d | Flags=%d | Retreating=%s | RetryUsed=%s | Location=%s | Target=%s | TargetLocation=%s"),
                 World ? World->GetTimeSeconds() : -1.0f,
-                *GetNameSafe(GetPawn()),
+                *GetNameSafe(ControlledPawn),
                 RequestID.GetID(),
                 *Result.ToString(),
                 static_cast<int32>(Result.Code),
                 static_cast<int32>(Result.Flags),
                 bIsRetreating ? TEXT("YES") : TEXT("NO"),
                 bRetreatRetryUsed ? TEXT("YES") : TEXT("NO"),
-                *GetPawn()->GetActorLocation().ToString(),
+                IsValid(ControlledPawn)
+                ? *ControlledPawn->GetActorLocation().ToString()
+                : TEXT("None"),
                 *GetNameSafe(RetreatLogTarget),
                 IsValid(RetreatLogTarget)
                 ? *RetreatLogTarget->GetActorLocation().ToString()
                 : TEXT("None")
             );
-
 
             if (Result.Code == EPathFollowingResult::Blocked &&
                 bIsRetreating &&
@@ -305,7 +521,6 @@ void ABotAIController::OnMoveCompleted(
                 bRetreatRetryUsed = true;
                 RetreatFromCombat();
             }
-
         }
 
         return;
@@ -324,6 +539,8 @@ void ABotAIController::OnMoveCompleted(
             bSeekingHealthPickup = false;
             CurrentHealthPickup.Reset();
 
+            TransitionToState(MakeShared<FPatrolState>());
+
             if (Result.Code == EPathFollowingResult::Success)
             {
                 MoveToRandomPatrolPoint();
@@ -337,6 +554,8 @@ void ABotAIController::OnMoveCompleted(
         {
             bSeekingHealthPickup = false;
             CurrentHealthPickup.Reset();
+
+            TransitionToState(MakeShared<FPatrolState>());
 
             // The pickup's overlap event will handle healing.
             // Do not immediately search for another pickup here.
@@ -357,6 +576,7 @@ void ABotAIController::OnMoveCompleted(
             bSeekingHealthPickup = false;
             CurrentHealthPickup.Reset();
 
+            TransitionToState(MakeShared<FPatrolState>());
             MoveToRandomPatrolPoint();
         }
 
@@ -374,7 +594,10 @@ void ABotAIController::OnMoveCompleted(
         {
             bSeekingAmmoPickup = false;
             CurrentAmmoPickup.Reset();
+
+            TransitionToState(MakeShared<FPatrolState>());
             MoveToRandomPatrolPoint();
+
             return;
         }
 
@@ -391,6 +614,7 @@ void ABotAIController::OnMoveCompleted(
             bSeekingAmmoPickup = false;
             CurrentAmmoPickup.Reset();
 
+            TransitionToState(MakeShared<FPatrolState>());
             MoveToRandomPatrolPoint();
         }
         else
@@ -409,6 +633,7 @@ void ABotAIController::OnMoveCompleted(
             bSeekingAmmoPickup = false;
             CurrentAmmoPickup.Reset();
 
+            TransitionToState(MakeShared<FPatrolState>());
             MoveToRandomPatrolPoint();
         }
 
@@ -426,6 +651,7 @@ void ABotAIController::OnMoveCompleted(
 
     if (Result.Code == EPathFollowingResult::Success)
     {
+        TransitionToState(MakeShared<FPatrolState>());
         MoveToRandomPatrolPoint();
     }
 }
@@ -776,8 +1002,12 @@ void ABotAIController::TrySeekHealthPickup()
     const EPathFollowingRequestResult::Type MoveResult =
         MoveToLocation(BestLocation, 5.0f, false);
 
-    if (MoveResult != EPathFollowingRequestResult::RequestSuccessful &&
-        MoveResult != EPathFollowingRequestResult::AlreadyAtGoal)
+    if (MoveResult == EPathFollowingRequestResult::RequestSuccessful ||
+        MoveResult == EPathFollowingRequestResult::AlreadyAtGoal)
+    {
+        TransitionToState(MakeShared<FSeekingHealthState>());
+    }
+    else
     {
         UE_LOG(
             LogTemp,
@@ -930,8 +1160,12 @@ void ABotAIController::TrySeekAmmoPickup()
     const EPathFollowingRequestResult::Type MoveResult =
         MoveToLocation(BestLocation, 100.0f);
 
-    if (MoveResult != EPathFollowingRequestResult::RequestSuccessful &&
-        MoveResult != EPathFollowingRequestResult::AlreadyAtGoal)
+    if (MoveResult == EPathFollowingRequestResult::RequestSuccessful ||
+        MoveResult == EPathFollowingRequestResult::AlreadyAtGoal)
+    {
+        TransitionToState(MakeShared<FSeekingAmmoState>());
+    }
+    else
     {
         UE_LOG(
             LogTemp,
@@ -953,60 +1187,17 @@ void ABotAIController::HandleTargetPerceptionUpdated(
     FAIStimulus Stimulus
 )
 {
-    if (!IsValidCombatTarget(Actor))
+    if (!CurrentState)
     {
         return;
     }
 
-    // Retreating bots must not restart pursuit or combat.
-    if (bIsRetreating)
+    if (!Actor || !IsValidCombatTarget(Actor))
     {
         return;
     }
 
-    if (Stimulus.WasSuccessfullySensed())
-    {
-        if (!IsValidCombatTarget(CurrentTarget.Get()))
-        {
-            // Combat takes priority over health seeking.
-            bSeekingHealthPickup = false;
-            CurrentHealthPickup.Reset();
-
-            CurrentTarget = Actor;
-            PursueCurrentTarget();
-            StartFiringAtTarget();
-
-            UE_LOG(
-                LogTemp,
-                Warning,
-                TEXT("BOT TARGET SELECTED: %s is pursuing %s"),
-                *GetNameSafe(GetPawn()),
-                *GetNameSafe(Actor)
-            );
-        }
-    }
-    else if (CurrentTarget.Get() == Actor)
-    {
-        UE_LOG(
-            LogTemp,
-            Warning,
-            TEXT("BOT TARGET LOST: %s lost sight of %s"),
-            *GetNameSafe(GetPawn()),
-            *GetNameSafe(Actor)
-        );
-
-        StopFiringAtTarget();
-        CurrentTarget.Reset();
-
-        // Do not cancel retreat movement when a target is lost.
-        if (bIsRetreating)
-        {
-            return;
-        }
-
-        StopMovement();
-        MoveToRandomPatrolPoint();
-    }
+    CurrentState->HandleTargetPerception(*this, Actor, Stimulus);
 }
 
 
@@ -1082,6 +1273,30 @@ void ABotAIController::RetreatFromCombat()
         return;
     }
 
+    // Handle retreat failure consistently, including unavailable navigation.
+    const auto HandleRetreatFailure = [this, ControlledPawn]()
+        {
+            bRetreatFailed = true;
+            bIsRetreating = false;
+
+            UE_LOG(
+                LogTemp,
+                Warning,
+                TEXT("BOT RETREAT FAILED: %s will defend itself"),
+                *GetNameSafe(ControlledPawn)
+            );
+
+            if (IsValidCombatTarget(CurrentTarget.Get()))
+            {
+                TransitionToState(MakeShared<FCombatState>());
+            }
+            else
+            {
+                TransitionToState(MakeShared<FPatrolState>());
+                MoveToRandomPatrolPoint();
+            }
+        };
+
     const FVector CurrentLocation = ControlledPawn->GetActorLocation();
 
     UE_LOG(
@@ -1107,6 +1322,8 @@ void ABotAIController::RetreatFromCombat()
             TEXT("RETREAT FAILURE: World is invalid for %s"),
             *GetNameSafe(ControlledPawn)
         );
+
+        HandleRetreatFailure();
         return;
     }
 
@@ -1121,6 +1338,8 @@ void ABotAIController::RetreatFromCombat()
             TEXT("RETREAT FAILURE: Navigation system unavailable for %s"),
             *GetNameSafe(ControlledPawn)
         );
+
+        HandleRetreatFailure();
         return;
     }
 
@@ -1162,9 +1381,10 @@ void ABotAIController::RetreatFromCombat()
             *GetNameSafe(ControlledPawn),
             *CurrentLocation.ToString()
         );
+
+        HandleRetreatFailure();
         return;
     }
-
 
     const float RetreatDistances[] = {
         RetreatDistance,
@@ -1319,20 +1539,9 @@ void ABotAIController::RetreatFromCombat()
         ProjectionAttempts,
         SuccessfulProjections,
         MoveRequestsFailed
-
-
     );
 
-    bRetreatFailed = true;
-    bIsRetreating = false;
-
-    UE_LOG(
-        LogTemp,
-        Warning,
-        TEXT("BOT RETREAT FAILED: %s will defend itself"),
-        *GetNameSafe(ControlledPawn)
-    );
-
+    HandleRetreatFailure();
 }
 
 
@@ -1356,10 +1565,11 @@ void ABotAIController::StopRetreating()
 
     if (IsValidCombatTarget(CurrentTarget.Get()))
     {
-        PursueCurrentTarget();
+        TransitionToState(MakeShared<FCombatState>());
     }
     else
     {
+        TransitionToState(MakeShared<FPatrolState>());
         MoveToRandomPatrolPoint();
     }
 }
@@ -1434,6 +1644,8 @@ void ABotAIController::FireAtCurrentTarget()
     else if (IsLowOnHealth() && !bRetreatFailed)
     {
         bIsRetreating = true;
+
+        TransitionToState(MakeShared<FRetreatingState>());
 
         UE_LOG(
             LogTemp,

@@ -27,12 +27,29 @@ protected:
     ) override;
 
 private:
+
+    // ---------------------------------------------------------
+    // State Pattern
+    // ---------------------------------------------------------
+
+    class FBotAIState;
+    class FPatrolState;
+    class FCombatState;
+    class FSeekingHealthState;
+    class FSeekingAmmoState;
+    class FRetreatingState;
+
+    TSharedPtr<FBotAIState> CurrentState;
+
+    void TransitionToState(TSharedPtr<FBotAIState> NewState);
+
+    // ---------------------------------------------------------
+    // Patrol and navigation diagnostics
+    // ---------------------------------------------------------
+
     void MoveToRandomPatrolPoint();
 
-    // Read-only snapshot of navigation registration state.
     void LogNavigationRegistrationState(const TCHAR* Context);
-
-    // Timer callback: logs the snapshot once, shortly after possession.
     void LogDelayedNavigationState();
 
     FTimerHandle NavDiagnosticTimerHandle;
@@ -45,23 +62,11 @@ private:
     UPROPERTY()
     TObjectPtr<UAISenseConfig_Sight> SightConfig;
 
+    // ---------------------------------------------------------
+    // Combat target
+    // ---------------------------------------------------------
+
     TWeakObjectPtr<AActor> CurrentTarget;
-
-    // Health-pickup seeking while patrolling.
-    TWeakObjectPtr<class AHealthPickup> CurrentHealthPickup;
-    TWeakObjectPtr<class AHealthPickup> FailedHealthPickup;
-
-    bool bSeekingHealthPickup = false;
-
-    void TrySeekHealthPickup();
-
-    // Ammo-pickup seeking while patrolling.
-    TWeakObjectPtr<class AWeaponAmmoPickup> CurrentAmmoPickup;
-    TWeakObjectPtr<class AWeaponAmmoPickup> FailedAmmoPickup;
-
-    bool bSeekingAmmoPickup = false;
-
-    void TrySeekAmmoPickup();
 
     bool IsValidCombatTarget(AActor* Actor) const;
 
@@ -76,7 +81,32 @@ private:
 
     static constexpr float CombatFireIntervalSeconds = 1.0f;
 
-    // Low-health retreat behaviour.
+    // ---------------------------------------------------------
+    // Health pickup seeking
+    // ---------------------------------------------------------
+
+    TWeakObjectPtr<class AHealthPickup> CurrentHealthPickup;
+    TWeakObjectPtr<class AHealthPickup> FailedHealthPickup;
+
+    bool bSeekingHealthPickup = false;
+
+    void TrySeekHealthPickup();
+
+    // ---------------------------------------------------------
+    // Ammo pickup seeking
+    // ---------------------------------------------------------
+
+    TWeakObjectPtr<class AWeaponAmmoPickup> CurrentAmmoPickup;
+    TWeakObjectPtr<class AWeaponAmmoPickup> FailedAmmoPickup;
+
+    bool bSeekingAmmoPickup = false;
+
+    void TrySeekAmmoPickup();
+
+    // ---------------------------------------------------------
+    // Low-health retreat behaviour
+    // ---------------------------------------------------------
+
     bool IsLowOnHealth() const;
 
     bool bRetreatRetryUsed = false;
@@ -86,14 +116,16 @@ private:
     void StopRetreating();
 
     bool bIsRetreating = false;
-
     bool bIssuingRetreatMove = false;
 
     static constexpr float LowHealthThreshold = 0.25f;
     static constexpr float RetreatDistance = 1500.0f;
 
-    // Keep retreat destinations safely inside the arena.
     static constexpr float RetreatArenaBoundary = 3400.0f;
+
+    // ---------------------------------------------------------
+    // Perception
+    // ---------------------------------------------------------
 
     UFUNCTION()
     void HandleTargetPerceptionUpdated(
