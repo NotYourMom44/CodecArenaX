@@ -6,6 +6,159 @@
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 
+// ------------------------------------------------------------
+// STATE PATTERN: Base state
+// ------------------------------------------------------------
+
+class ACodecArenaXPlayerController::FControllerState
+{
+public:
+    explicit FControllerState(ACodecArenaXPlayerController& InController)
+        : Controller(InController)
+    {}
+
+    virtual ~FControllerState() = default;
+
+    virtual void Enter() {}
+    virtual void Exit() {}
+
+    virtual void TogglePause() {}
+    virtual void ShowLeaderboard() {}
+    virtual void HideLeaderboard() {}
+
+protected:
+    ACodecArenaXPlayerController& Controller;
+};
+
+
+// ------------------------------------------------------------
+// Concrete state declarations
+// ------------------------------------------------------------
+
+class ACodecArenaXPlayerController::FPlayingState
+    : public ACodecArenaXPlayerController::FControllerState
+{
+public:
+    using FControllerState::FControllerState;
+
+    void Enter() override;
+    void TogglePause() override;
+    void ShowLeaderboard() override;
+    void HideLeaderboard() override;
+};
+
+
+class ACodecArenaXPlayerController::FPausedState
+    : public ACodecArenaXPlayerController::FControllerState
+{
+public:
+    using FControllerState::FControllerState;
+
+    void Enter() override;
+    void TogglePause() override;
+};
+
+
+class ACodecArenaXPlayerController::FMatchOverState
+    : public ACodecArenaXPlayerController::FControllerState
+{
+public:
+    using FControllerState::FControllerState;
+
+    void Enter() override;
+};
+
+
+// ------------------------------------------------------------
+// Playing state implementation
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::FPlayingState::Enter()
+{
+    Controller.ClosePauseMenu();
+}
+
+void ACodecArenaXPlayerController::FPlayingState::TogglePause()
+{
+    TSharedPtr<FControllerState> NewState =
+        MakeShared<FPausedState>(Controller);
+
+    Controller.TransitionToState(MoveTemp(NewState));
+}
+
+void ACodecArenaXPlayerController::FPlayingState::ShowLeaderboard()
+{
+    if (Controller.LeaderboardWidget)
+    {
+        Controller.LeaderboardWidget->SetVisibility(
+            ESlateVisibility::Visible
+        );
+    }
+}
+
+void ACodecArenaXPlayerController::FPlayingState::HideLeaderboard()
+{
+    Controller.HideLeaderboard();
+}
+
+
+// ------------------------------------------------------------
+// Paused state implementation
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::FPausedState::Enter()
+{
+    Controller.OpenPauseMenu();
+}
+
+void ACodecArenaXPlayerController::FPausedState::TogglePause()
+{
+    TSharedPtr<FControllerState> NewState =
+        MakeShared<FPlayingState>(Controller);
+
+    Controller.TransitionToState(MoveTemp(NewState));
+}
+
+
+// ------------------------------------------------------------
+// Match Over state implementation
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::FMatchOverState::Enter()
+{
+    Controller.OpenMatchOverScreen();
+}
+
+
+// ------------------------------------------------------------
+// State transition management
+// ------------------------------------------------------------
+
+ACodecArenaXPlayerController::~ACodecArenaXPlayerController() = default;
+
+void ACodecArenaXPlayerController::TransitionToState(
+    TSharedPtr<FControllerState> NewState
+)
+{
+    if (!NewState.IsValid())
+    {
+        return;
+    }
+
+    if (CurrentState.IsValid())
+    {
+        CurrentState->Exit();
+    }
+
+    CurrentState = MoveTemp(NewState);
+    CurrentState->Enter();
+}
+
+
+// ------------------------------------------------------------
+// Begin Play
+// ------------------------------------------------------------
+
 void ACodecArenaXPlayerController::BeginPlay()
 {
     Super::BeginPlay();
@@ -14,11 +167,6 @@ void ACodecArenaXPlayerController::BeginPlay()
     {
         return;
     }
-
-    bShowMouseCursor = false;
-
-    FInputModeGameOnly InputMode;
-    SetInputMode(InputMode);
 
     if (LeaderboardWidgetClass)
     {
@@ -68,6 +216,12 @@ void ACodecArenaXPlayerController::BeginPlay()
         }
     }
 
+    // Enter the initial Playing state.
+    TSharedPtr<FControllerState> InitialState =
+        MakeShared<FPlayingState>(*this);
+
+    TransitionToState(MoveTemp(InitialState));
+
     ACodecArenaXGameState* MatchGameState =
         GetWorld()->GetGameState<ACodecArenaXGameState>();
 
@@ -87,6 +241,11 @@ void ACodecArenaXPlayerController::BeginPlay()
         }
     }
 }
+
+
+// ------------------------------------------------------------
+// Input setup
+// ------------------------------------------------------------
 
 void ACodecArenaXPlayerController::SetupInputComponent()
 {
@@ -133,14 +292,16 @@ void ACodecArenaXPlayerController::SetupInputComponent()
     }
 }
 
+
+// ------------------------------------------------------------
+// State-dispatched input
+// ------------------------------------------------------------
+
 void ACodecArenaXPlayerController::ShowLeaderboard()
 {
-    if (LeaderboardWidget &&
-        !UGameplayStatics::IsGamePaused(GetWorld()))
+    if (CurrentState.IsValid())
     {
-        LeaderboardWidget->SetVisibility(
-            ESlateVisibility::Visible
-        );
+        CurrentState->ShowLeaderboard();
     }
 }
 
@@ -156,99 +317,51 @@ void ACodecArenaXPlayerController::HideLeaderboard()
 
 void ACodecArenaXPlayerController::TogglePause()
 {
-    if (!PauseMenuWidget)
+    if (CurrentState.IsValid())
     {
-        return;
-    }
-
-    ACodecArenaXGameState* MatchGameState =
-        GetWorld()->GetGameState<ACodecArenaXGameState>();
-
-    if (MatchGameState &&
-        MatchGameState->GetMatchState() ==
-        ECodecArenaMatchState::MatchOver)
-    {
-        return;
-    }
-
-    if (UGameplayStatics::IsGamePaused(GetWorld()))
-    {
-        SetPause(false);
-
-        PauseMenuWidget->SetVisibility(
-            ESlateVisibility::Collapsed
-        );
-
-        bShowMouseCursor = false;
-
-        FInputModeGameOnly InputMode;
-        SetInputMode(InputMode);
-    }
-    else
-    {
-        HideLeaderboard();
-
-        PauseMenuWidget->SetVisibility(
-            ESlateVisibility::Visible
-        );
-
-        SetPause(true);
-
-        bShowMouseCursor = true;
-
-        FInputModeGameAndUI InputMode;
-        InputMode.SetWidgetToFocus(PauseMenuWidget->TakeWidget());
-        InputMode.SetLockMouseToViewportBehavior(
-            EMouseLockMode::DoNotLock
-        );
-        InputMode.SetHideCursorDuringCapture(false);
-
-        SetInputMode(InputMode);
+        CurrentState->TogglePause();
     }
 }
 
-void ACodecArenaXPlayerController::HandleMatchStateChanged(
-    ECodecArenaMatchState NewMatchState
-)
-{
-    if (NewMatchState != ECodecArenaMatchState::MatchOver)
-    {
-        return;
-    }
 
+// ------------------------------------------------------------
+// Pause menu actions
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::OpenPauseMenu()
+{
     HideLeaderboard();
 
     if (PauseMenuWidget)
     {
         PauseMenuWidget->SetVisibility(
-            ESlateVisibility::Collapsed
+            ESlateVisibility::Visible
         );
     }
-
-    if (!MatchOverWidget)
-    {
-        return;
-    }
-
-    MatchOverWidget->SetVisibility(
-        ESlateVisibility::Visible
-    );
 
     SetPause(true);
 
     bShowMouseCursor = true;
 
     FInputModeGameAndUI InputMode;
-    InputMode.SetWidgetToFocus(MatchOverWidget->TakeWidget());
+
+    if (PauseMenuWidget)
+    {
+        InputMode.SetWidgetToFocus(
+            PauseMenuWidget->TakeWidget()
+        );
+    }
+
     InputMode.SetLockMouseToViewportBehavior(
         EMouseLockMode::DoNotLock
     );
+
     InputMode.SetHideCursorDuringCapture(false);
 
     SetInputMode(InputMode);
 }
 
-void ACodecArenaXPlayerController::ResumeGame()
+void ACodecArenaXPlayerController::ClosePauseMenu()
 {
     SetPause(false);
 
@@ -272,14 +385,90 @@ void ACodecArenaXPlayerController::ResumeGame()
     SetInputMode(InputMode);
 }
 
+
+// ------------------------------------------------------------
+// Match Over screen action
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::OpenMatchOverScreen()
+{
+    HideLeaderboard();
+
+    if (PauseMenuWidget)
+    {
+        PauseMenuWidget->SetVisibility(
+            ESlateVisibility::Collapsed
+        );
+    }
+
+    if (MatchOverWidget)
+    {
+        MatchOverWidget->SetVisibility(
+            ESlateVisibility::Visible
+        );
+    }
+
+    SetPause(true);
+
+    bShowMouseCursor = true;
+
+    FInputModeGameAndUI InputMode;
+
+    if (MatchOverWidget)
+    {
+        InputMode.SetWidgetToFocus(
+            MatchOverWidget->TakeWidget()
+        );
+    }
+
+    InputMode.SetLockMouseToViewportBehavior(
+        EMouseLockMode::DoNotLock
+    );
+
+    InputMode.SetHideCursorDuringCapture(false);
+
+    SetInputMode(InputMode);
+}
+
+
+// ------------------------------------------------------------
+// Game State notification
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::HandleMatchStateChanged(
+    ECodecArenaMatchState NewMatchState
+)
+{
+    if (NewMatchState == ECodecArenaMatchState::MatchOver)
+    {
+        TSharedPtr<FControllerState> NewState =
+            MakeShared<FMatchOverState>(*this);
+
+        TransitionToState(MoveTemp(NewState));
+    }
+}
+
+
+// ------------------------------------------------------------
+// Blueprint-callable actions
+// ------------------------------------------------------------
+
+void ACodecArenaXPlayerController::ResumeGame()
+{
+    TSharedPtr<FControllerState> NewState =
+        MakeShared<FPlayingState>(*this);
+
+    TransitionToState(MoveTemp(NewState));
+}
+
 void ACodecArenaXPlayerController::RestartMatch()
 {
     SetPause(false);
 
-    bShowMouseCursor = false;
+    TSharedPtr<FControllerState> NewState =
+        MakeShared<FPlayingState>(*this);
 
-    FInputModeGameOnly InputMode;
-    SetInputMode(InputMode);
+    TransitionToState(MoveTemp(NewState));
 
     const FString CurrentLevelName =
         UGameplayStatics::GetCurrentLevelName(this, true);
