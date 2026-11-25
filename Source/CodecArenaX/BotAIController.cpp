@@ -22,9 +22,9 @@
 #include "Perception/AISense_Sight.h"
 
 
-// ------------------------------------------------------------
+
 // Bot AI State Pattern
-// ------------------------------------------------------------
+
 
 class ABotAIController::FBotAIState
 {
@@ -93,9 +93,9 @@ public:
     ) override;
 };
 
-// ------------------------------------------------------------
+
 // Bot AI State Implementations
-// ------------------------------------------------------------
+
 
 void ABotAIController::FPatrolState::HandleTargetPerception(
     ABotAIController& Controller,

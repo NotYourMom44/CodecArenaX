@@ -6,9 +6,9 @@
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
 
-// ------------------------------------------------------------
+
 // STATE PATTERN: Base state
-// ------------------------------------------------------------
+
 
 class ACodecArenaXPlayerController::FControllerState
 {
@@ -31,9 +31,9 @@ protected:
 };
 
 
-// ------------------------------------------------------------
+
 // Concrete state declarations
-// ------------------------------------------------------------
+
 
 class ACodecArenaXPlayerController::FPlayingState
     : public ACodecArenaXPlayerController::FControllerState
@@ -69,9 +69,9 @@ public:
 };
 
 
-// ------------------------------------------------------------
+
 // Playing state implementation
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::FPlayingState::Enter()
 {
@@ -102,9 +102,9 @@ void ACodecArenaXPlayerController::FPlayingState::HideLeaderboard()
 }
 
 
-// ------------------------------------------------------------
+
 // Paused state implementation
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::FPausedState::Enter()
 {
@@ -120,9 +120,9 @@ void ACodecArenaXPlayerController::FPausedState::TogglePause()
 }
 
 
-// ------------------------------------------------------------
+
 // Match Over state implementation
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::FMatchOverState::Enter()
 {
@@ -130,9 +130,9 @@ void ACodecArenaXPlayerController::FMatchOverState::Enter()
 }
 
 
-// ------------------------------------------------------------
+
 // State transition management
-// ------------------------------------------------------------
+
 
 ACodecArenaXPlayerController::~ACodecArenaXPlayerController() = default;
 
@@ -155,9 +155,9 @@ void ACodecArenaXPlayerController::TransitionToState(
 }
 
 
-// ------------------------------------------------------------
+
 // Begin Play
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::BeginPlay()
 {
@@ -243,9 +243,9 @@ void ACodecArenaXPlayerController::BeginPlay()
 }
 
 
-// ------------------------------------------------------------
+
 // Input setup
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::SetupInputComponent()
 {
@@ -293,9 +293,9 @@ void ACodecArenaXPlayerController::SetupInputComponent()
 }
 
 
-// ------------------------------------------------------------
+
 // State-dispatched input
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::ShowLeaderboard()
 {
@@ -324,9 +324,9 @@ void ACodecArenaXPlayerController::TogglePause()
 }
 
 
-// ------------------------------------------------------------
+
 // Pause menu actions
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::OpenPauseMenu()
 {
@@ -386,9 +386,9 @@ void ACodecArenaXPlayerController::ClosePauseMenu()
 }
 
 
-// ------------------------------------------------------------
+
 // Match Over screen action
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::OpenMatchOverScreen()
 {
@@ -431,9 +431,9 @@ void ACodecArenaXPlayerController::OpenMatchOverScreen()
 }
 
 
-// ------------------------------------------------------------
+
 // Game State notification
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::HandleMatchStateChanged(
     ECodecArenaMatchState NewMatchState
@@ -449,9 +449,9 @@ void ACodecArenaXPlayerController::HandleMatchStateChanged(
 }
 
 
-// ------------------------------------------------------------
+
 // Blueprint-callable actions
-// ------------------------------------------------------------
+
 
 void ACodecArenaXPlayerController::ResumeGame()
 {

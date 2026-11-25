@@ -28,9 +28,9 @@ protected:
 
 private:
 
-    // ---------------------------------------------------------
+    
     // State Pattern
-    // ---------------------------------------------------------
+    
 
     class FBotAIState;
     class FPatrolState;
@@ -43,9 +43,9 @@ private:
 
     void TransitionToState(TSharedPtr<FBotAIState> NewState);
 
-    // ---------------------------------------------------------
+    
     // Patrol and navigation diagnostics
-    // ---------------------------------------------------------
+    
 
     void MoveToRandomPatrolPoint();
 
@@ -62,9 +62,9 @@ private:
     UPROPERTY()
     TObjectPtr<UAISenseConfig_Sight> SightConfig;
 
-    // ---------------------------------------------------------
+    
     // Combat target
-    // ---------------------------------------------------------
+    
 
     TWeakObjectPtr<AActor> CurrentTarget;
 
@@ -81,9 +81,9 @@ private:
 
     static constexpr float CombatFireIntervalSeconds = 1.0f;
 
-    // ---------------------------------------------------------
+    
     // Health pickup seeking
-    // ---------------------------------------------------------
+   
 
     TWeakObjectPtr<class AHealthPickup> CurrentHealthPickup;
     TWeakObjectPtr<class AHealthPickup> FailedHealthPickup;
@@ -92,9 +92,9 @@ private:
 
     void TrySeekHealthPickup();
 
-    // ---------------------------------------------------------
+    
     // Ammo pickup seeking
-    // ---------------------------------------------------------
+    
 
     TWeakObjectPtr<class AWeaponAmmoPickup> CurrentAmmoPickup;
     TWeakObjectPtr<class AWeaponAmmoPickup> FailedAmmoPickup;
@@ -103,9 +103,9 @@ private:
 
     void TrySeekAmmoPickup();
 
-    // ---------------------------------------------------------
+    
     // Low-health retreat behaviour
-    // ---------------------------------------------------------
+    
 
     bool IsLowOnHealth() const;
 
@@ -123,9 +123,9 @@ private:
 
     static constexpr float RetreatArenaBoundary = 3400.0f;
 
-    // ---------------------------------------------------------
+    
     // Perception
-    // ---------------------------------------------------------
+    
 
     UFUNCTION()
     void HandleTargetPerceptionUpdated(
